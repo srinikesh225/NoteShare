@@ -4,15 +4,15 @@ This table lists the main test cases. Every row matches a real pytest test (name
 Description or listed under TC-18 onwards by file), and the **Pass/Fail column is copied from
 the latest test run**, not typed by hand.
 
-**Latest run:** 09 October 2026, 23:36 (local time) on MySQL 8.0.46, command `python -m pytest -v`.
-**Whole suite:** 270 tests collected, 270 passed, 0 failed,
+**Latest run:** 09 October 2026, 23:58 (local time) on MySQL 8.0.46, command `python -m pytest -v`.
+**Whole suite:** 290 tests collected, 290 passed, 0 failed,
 0 skipped. Some rows cover several cases of one test (for example TC-03 runs
 for both `malware.exe` and `notes.txt`); a row is marked Pass only if all its cases passed.
 
 TC-01 to TC-17 are in `tests/test_app.py`. TC-18 onwards are in the other test files:
 TC-18 to TC-20 and TC-28 in `test_auth.py`; TC-21, TC-23, TC-29, TC-30, TC-35 and TC-36 in
 `test_notes.py`; TC-22, TC-24 to TC-27 and TC-31 to TC-34 in `test_phase4.py`; TC-37 in
-`test_seo.py`.
+`test_seo.py`; TC-38 to TC-44 in `test_moderation_users.py`.
 
 | Test ID | Description | Input | Expected result | Actual result | Pass/Fail |
 | ------- | ----------- | ----- | --------------- | ------------- | --------- |
@@ -53,8 +53,15 @@ TC-18 to TC-20 and TC-28 in `test_auth.py`; TC-21, TC-23, TC-29, TC-30, TC-35 an
 | TC-35 | Five sample uploads across semesters 5 and 6 | PDF, DOCX, PPTX, PNG and PDF for CS501, CS502, CS503, CS601, CS602 | All saved with UUID file names and listed; downloads return the same bytes | 5 notes with the right subjects and UUID names; all 5 listed; every download byte-for-byte identical | Pass |
 | TC-36 | Search + semester + subject + sort with pagination | `q=algorithms`, semester 5, subject CS501, newest, 15 matching notes | 12 on page 1, 3 on page 2; links keep every filter | 12 then 3 results; Next/Previous links kept q, semester, subject and sort | Pass |
 | TC-37 | Every page has one heading, a unique title and a description | 11 pages: public, signed-in only, a hidden note and a 404 page | Exactly one `<h1>`, a unique `<title>` and a description on each | All pages had one `<h1>`, unique titles ending in “· NoteShare” and a description | Pass |
+| TC-38 | Moderator unbans a student (`test_moderator_can_unban_a_student`) | Banned student with 3 warnings; moderator confirms *Unban* on the Users page | Account unbanned; success message; warnings unchanged | `is_banned` = false; “Bina Banned has been unbanned and can log in again.” shown; warnings still 3; redirected back to the Users page | Pass |
+| TC-39 | Moderator resets warnings (`test_moderator_can_reset_warnings`) | Student with 2 warnings; moderator confirms *Reset warnings* | Warnings become 0; success message; ban status unchanged | Warnings 0, not banned; “Wasim Warned's warnings have been reset to 0.” shown | Pass |
+| TC-40 | Student opens the Users page (`test_student_cannot_open_moderation_users`) | A student requests `/moderation/users` and posts the unban and reset forms directly | Page and actions refused; nothing changes; signed-out visitors sent to login | 403 “Access denied” with no user data; both actions 403; the target kept 2 warnings and stayed banned; signed out: 302 to `/login` | Pass |
+| TC-41 | Unbanned student logs in again (`test_unbanned_student_can_log_in_again`) | Banned student tries to log in, a moderator unbans them, they log in again | First login refused; after unbanning, login works and protected pages open | First login 403 “Your account has been suspended.”; after unbanning, login redirected to `/` and My Notes opened (200) | Pass |
+| TC-42 | Users page search (5 cases) | “ananya”, “KIRAN@”, “college.example”, “nobody”, “%” | Matches by name or email, any letter case; no matches shows a message; `%` is not a wildcard | Each search listed exactly the expected students; the empty searches showed “No students match” | Pass |
+| TC-43 | Users page actions only affect students | Moderator tries to unban / reset another moderator, and a missing user id | Refused with 404; the account is unchanged | Both actions 404; the other moderator kept 2 warnings and stayed banned; unknown id 404 | Pass |
+| TC-44 | Unban and reset need POST and a CSRF token (2 cases) | GET, POST without a token, POST with a forged token | 405 for GET, 400 for missing or forged tokens; nothing changes | 405 and 400 as expected for both actions; warnings and ban status unchanged | Pass |
 
-Rows in this table: 37 (37 Pass, 0 Fail, 0 Skipped).
+Rows in this table: 44 (44 Pass, 0 Fail, 0 Skipped).
 
 ## How to run the tests
 
@@ -80,5 +87,5 @@ unless its name ends in `_test` and it is different from `DATABASE_URL`.
    python -m pytest tests/test_app.py -v
    ```
 
-A full run takes about two and a half minutes. Uploaded test files go to a temporary folder,
+A full run takes about four minutes. Uploaded test files go to a temporary folder,
 not `uploads/`.

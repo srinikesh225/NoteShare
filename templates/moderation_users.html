@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from "_layout.html" import breadcrumbs %}
+
+{% block title %}{% if q %}“{{ q }}” in {% endif %}Users{% if page > 1 %} — page {{ page }}{% endif %}{% endblock %}
+{% block description %}Student accounts, warnings and suspensions, for NoteShare moderators.{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+{% block main_class %}site-main--wide{% endblock %}
+
+{% block breadcrumbs %}{{ breadcrumbs([("Browse notes", url_for("notes.browse")), ("Moderation", url_for("moderation.reports")), ("Users", none)]) }}{% endblock %}
+
+{% block content %}
+<section aria-labelledby="users-heading">
+  <div class="page-header">
+    <div>
+      <h1 id="users-heading">Users<sup class="heading-count" aria-label="{{ total }} students"> ({{ total }})</sup></h1>
+      <p class="page-intro">Student accounts with their warnings and suspensions. An account is suspended automatically at {{ ban_at }} warnings.</p>
+    </div>
+  </div>
+
+  <form class="filters filters--single" method="get" action="{{ url_for('moderation.users') }}" role="search" aria-label="Search students">
+    <div class="filter filter--search">
+      <label for="user-search">Search by name or email</label>
+      <input id="user-search" type="search" name="q" value="{{ q }}" maxlength="100" placeholder="e.g. Ananya or student1@">
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="button button--primary">Search</button>
+      {% if q %}<a class="button button--secondary" href="{{ url_for('moderation.users') }}">Clear</a>{% endif %}
+    </div>
+  </form>
+
+  {% if rows %}
+    <p class="results-summary" role="status">
+      {{ total }} student{{ "s" if total != 1 }}{% if q %} matching “{{ q }}”{% endif %}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}
+    </p>
+    <div class="table-wrap">
+      <table class="notes-table users-table">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Email</th>
+            <th scope="col">Warnings</th>
+            <th scope="col">Status</th>
+            <th scope="col">Uploads</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user, uploads in rows %}
+            <tr id="user-{{ user.id }}">
+              <th scope="row" data-label="Name">{{ user.name }}</th>
+              <td data-label="Email" class="cell-email">{{ user.email }}</td>
+              <td data-label="Warnings">{{ user.warnings }} of {{ ban_at }}</td>
+              <td data-label="Status">
+                {% if user.is_banned %}<span class="status status--banned">Banned</span>{% else %}<span class="status status--active">Active</span>{% endif %}
+              </td>
+              <td data-label="Uploads">{{ uploads }}</td>
+              <td class="row-actions">
+                {% if user.is_banned %}
+                  <details class="confirm-delete confirm-delete--inline confirm-neutral">
+                    <summary class="button button--secondary button--small">Unban<span class="visually-hidden"> {{ user.name }}</span></summary>
+                    <form method="post" action="{{ url_for('moderation.unban', user_id=user.id) }}" data-submit-once>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="q" value="{{ q }}">
+                      <input type="hidden" name="page" value="{{ page }}">
+                      <p>Are you sure you want to unban {{ user.name }}? They will be able to log in again.
+                        {% if user.warnings >= ban_at %}Their warnings stay at {{ user.warnings }}, so their next warning will suspend them again unless you reset them.{% endif %}</p>
+                      <button type="submit" class="button button--primary button--small">Yes, unban</button>
+                    </form>
+                  </details>
+                {% endif %}
+                {% if user.warnings > 0 %}
+                  <details class="confirm-delete confirm-delete--inline confirm-neutral">
+                    <summary class="button button--secondary button--small">Reset warnings<span class="visually-hidden"> for {{ user.name }}</span></summary>
+                    <form method="post" action="{{ url_for('moderation.reset_warnings', user_id=user.id) }}" data-submit-once>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="q" value="{{ q }}">
+                      <input type="hidden" name="page" value="{{ page }}">
+                      <p>Are you sure you want to reset {{ user.name }}'s warnings from {{ user.warnings }} to 0?
+                        {% if user.is_banned %}This does not unban them.{% endif %}</p>
+                      <button type="submit" class="button button--primary button--small">Yes, reset warnings</button>
+                    </form>
+                  </details>
+                {% endif %}
+                {% if not user.is_banned and user.warnings == 0 %}<span class="muted small">No action needed</span>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pages > 1 %}
+      <nav class="pagination" aria-label="Pagination">
+        <ul>
+          <li>{% if page > 1 %}<a class="page-link" rel="prev" href="{{ url_for('moderation.users', q=q or none, page=page - 1) }}">Previous</a>{% else %}<span class="page-link is-disabled" aria-disabled="true">Previous</span>{% endif %}</li>
+          <li class="page-number"><span class="page-link is-current" aria-current="page"><span class="visually-hidden">Page </span>{{ page }}</span></li>
+          <li>{% if page < pages %}<a class="page-link" rel="next" href="{{ url_for('moderation.users', q=q or none, page=page + 1) }}">Next</a>{% else %}<span class="page-link is-disabled" aria-disabled="true">Next</span>{% endif %}</li>
+        </ul>
+      </nav>
+    {% endif %}
+  {% elif q %}
+    <div class="empty-state" role="status">
+      <h2>No students match “{{ q }}”.</h2>
+      <p>Check the spelling, or search for part of the name or email.</p>
+      <a class="button button--secondary" href="{{ url_for('moderation.users') }}">Clear search</a>
+    </div>
+  {% else %}
+    <div class="empty-state" role="status">
+      <h2>No student accounts yet.</h2>
+      <p>Students appear here after they register.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

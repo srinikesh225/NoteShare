@@ -420,9 +420,9 @@ def test_navigation_for_anonymous_visitor(client):
 # Every navigation item is a real page since Phase 4 (Reports = moderation,
 # Subjects = subject administration).
 @pytest.mark.parametrize("role, links, soon, hidden", [
-    ("student", ["Browse", "Upload", "My Notes"], [], ["Reports", "Subjects"]),
-    ("moderator", ["Browse", "Upload", "My Notes", "Reports"], [], ["Subjects"]),
-    ("admin", ["Browse", "Upload", "My Notes", "Reports", "Subjects"], [], []),
+    ("student", ["Browse", "Upload", "My Notes"], [], ["Reports", "Users", "Subjects"]),
+    ("moderator", ["Browse", "Upload", "My Notes", "Reports", "Users"], [], ["Subjects"]),
+    ("admin", ["Browse", "Upload", "My Notes", "Reports", "Users", "Subjects"], [], []),
 ])
 def test_navigation_by_role(client, make_user, role, links, soon, hidden):
     make_user(email=f"{role}@college.example", role=role)

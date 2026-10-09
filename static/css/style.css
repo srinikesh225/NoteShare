@@ -639,6 +639,7 @@ a.subject-code:hover { background: var(--color-accent); color: var(--color-highl
 .status--active { color: var(--color-success); background: var(--color-success-bg); }
 .status--flagged { color: var(--color-warning); background: var(--color-warning-bg); }
 .status--removed { color: var(--color-error); background: var(--color-error-bg); text-decoration: line-through; text-decoration-thickness: 1px; }
+.status--banned { color: var(--color-error); background: var(--color-error-bg); }
 
 .button--danger { background: var(--color-error); color: #fff; }
 .button--danger:hover { background: #8a2219; color: #fff; }
@@ -989,6 +990,18 @@ a.page-link:hover { border-color: var(--color-input-border); color: var(--color-
 .mod-actions .confirm-delete--inline form { width: min(320px, 100%); }
 
 .form-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* ---------- Moderation: users ---------- */
+
+.filters--single { grid-template-columns: minmax(0, 1fr) auto; }
+.filters--single .filter--search { grid-column: auto; }
+.filters--single .filter-actions { grid-column: auto; }
+.cell-email { overflow-wrap: anywhere; }
+/* Unban / reset are reversible, so their confirmation panel is neutral, not red. */
+.confirm-neutral form { border-color: var(--color-input-border); background: var(--color-surface); }
+.confirm-neutral form p { color: var(--color-text); }
+.users-table .row-actions details + details { margin-left: var(--space-1); }
+
 
 /* ---------- Responsive ---------- */
 

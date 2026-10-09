@@ -61,6 +61,7 @@ NAV_ITEMS = [
     ("Upload", "notes.upload", "student"),
     ("My Notes", "notes.mine", "student"),
     ("Reports", "moderation.reports", "moderator"),
+    ("Users", "moderation.users", "moderator"),
     ("Subjects", "admin.subjects", "admin"),
 ]
 SEARCH_ENDPOINT = "notes.browse"  # the homepage handles ?q= searches

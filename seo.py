@@ -53,6 +53,8 @@ def robots_txt():
         "Disallow: /account",
         "Disallow: /logout",
         "Disallow: /note/*/download",
+        "Disallow: /moderation",
+        "Disallow: /admin",
         "",
         f"Sitemap: {absolute_url(url_for('seo.sitemap_xml'))}",
         "",

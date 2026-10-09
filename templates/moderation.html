@@ -16,6 +16,7 @@
       <h1 id="moderation-heading">Moderation<sup class="heading-count" aria-label="{{ pagination.total }} notes with open reports"> ({{ pagination.total }})</sup></h1>
       <p class="page-intro">Open reports, grouped by note. Flagged notes come first, then the most reported, then the longest waiting.</p>
     </div>
+    <a class="button button--secondary" href="{{ url_for('moderation.users') }}">Manage users</a>
   </div>
 
   {% if groups %}

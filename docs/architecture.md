@@ -61,7 +61,7 @@ The routes are grouped into blueprints, one file per area:
 | `app.py` | Creates the app, turns on CSRF protection, registers the blueprints, shows the error pages (403, 404, 500 …) |
 | `auth.py` | Register, log in, log out, account page; the `login_required` and `role_required` checks; loading the signed-in user |
 | `notes.py` | Browse/search/filter/sort, upload, note page, ratings, reports and automatic flagging, download, My Notes, delete |
-| `moderation.py` | Moderation dashboard; dismiss, remove, warn and ban actions |
+| `moderation.py` | Moderation dashboard; dismiss, remove, warn and ban actions; the Users page with unban and reset warnings |
 | `admin.py` | Adding, editing and deleting subjects (admins only) |
 | `seo.py` | `robots.txt`, `sitemap.xml`, `llms.txt`, `favicon.ico` |
 | `config.py` | Settings read from `.env` (database address, secret key, upload folder, limits) |

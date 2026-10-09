@@ -3,6 +3,9 @@ Moderation dashboard and actions. Moderators and admins only (admins inherit
 moderator permissions through the role hierarchy).
 
 GET  /moderation                         open reports, grouped by note
+GET  /moderation/users                   students: warnings, bans, uploads
+POST /moderation/users/<id>/unban        is_banned = False
+POST /moderation/users/<id>/reset-warnings   warnings = 0
 POST /moderation/note/<id>/dismiss       resolve open reports; flagged -> active
 POST /moderation/note/<id>/remove        resolve open reports; note -> removed
 POST /moderation/note/<id>/warn          uploader.warnings + 1; ban at the limit
@@ -245,3 +248,106 @@ def ban(note_id):
         return _back_to_dashboard()
     flash(f"{uploader.name} has been suspended and can no longer log in.", "success")
     return _back_to_dashboard()
+
+
+# --------------------------------------------------------------------------
+# Users: GET /moderation/users, POST .../unban, POST .../reset-warnings
+# --------------------------------------------------------------------------
+
+USERS_PER_PAGE = 25
+USER_SEARCH_MAX_LENGTH = 100
+
+
+def _users_redirect():
+    """Back to the users list, keeping the search and page the moderator was on."""
+    q = " ".join((request.form.get("q") or "").split())[:USER_SEARCH_MAX_LENGTH]
+    return redirect(url_for("moderation.users", q=q or None, page=_page_arg(request.form)))
+
+
+def _student_or_404(user_id):
+    """Only student accounts are managed here; staff accounts are refused."""
+    user = db.session.execute(
+        db.select(User).where(User.id == user_id).with_for_update()
+    ).scalar_one_or_none()
+    if user is None or user.role != "student":
+        abort(404)
+    return user
+
+
+@bp.route("/users")
+@role_required("moderator")
+def users():
+    q = " ".join((request.args.get("q") or "").split())[:USER_SEARCH_MAX_LENGTH]
+    page = _page_arg(request.args)
+
+    uploads = (
+        db.select(Note.uploader_id.label("user_id"), db.func.count(Note.id).label("uploads"))
+        .group_by(Note.uploader_id)
+        .subquery()
+    )
+    query = (
+        db.select(User, db.func.coalesce(uploads.c.uploads, 0))
+        .outerjoin(uploads, uploads.c.user_id == User.id)
+        .where(User.role == "student")
+        .order_by(User.name, User.id)
+    )
+    if q:
+        # % and _ typed by the moderator are matched literally.
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
+        query = query.where(db.or_(User.name.ilike(pattern, escape="\\"),
+                                   User.email.ilike(pattern, escape="\\")))
+
+    total = db.session.execute(
+        db.select(db.func.count()).select_from(query.order_by(None).subquery())
+    ).scalar()
+    pages = max(1, -(-total // USERS_PER_PAGE))
+    if page > pages:
+        return redirect(url_for("moderation.users", q=q or None, page=pages))
+    rows = db.session.execute(
+        query.limit(USERS_PER_PAGE).offset((page - 1) * USERS_PER_PAGE)
+    ).all()
+
+    return render_template(
+        "moderation_users.html",
+        rows=rows,
+        q=q,
+        page=page,
+        pages=pages,
+        total=total,
+        ban_at=current_app.config["BAN_AT_WARNINGS"],
+    )
+
+
+@bp.route("/users/<int:user_id>/unban", methods=["POST"])
+@role_required("moderator")
+def unban(user_id):
+    student = _student_or_404(user_id)
+    if not student.is_banned:
+        db.session.rollback()
+        flash(f"{student.name} is not suspended.", "info")
+        return _users_redirect()
+    student.is_banned = False  # warnings are left as they are (see README)
+    if not _commit_or_fail(user_id, "unban"):
+        return _users_redirect()
+    current_app.logger.info("User %s unbanned by %s #%s", user_id, g.current_user.role, g.current_user.id)
+    flash(f"{student.name} has been unbanned and can log in again.", "success")
+    return _users_redirect()
+
+
+@bp.route("/users/<int:user_id>/reset-warnings", methods=["POST"])
+@role_required("moderator")
+def reset_warnings(user_id):
+    student = _student_or_404(user_id)
+    if student.warnings == 0:
+        db.session.rollback()
+        flash(f"{student.name} has no warnings.", "info")
+        return _users_redirect()
+    previous = student.warnings
+    student.warnings = 0  # does not change is_banned
+    if not _commit_or_fail(user_id, "reset warnings"):
+        return _users_redirect()
+    current_app.logger.info("Warnings of user %s reset from %s by %s #%s",
+                            user_id, previous, g.current_user.role, g.current_user.id)
+    flash(f"{student.name}'s warnings have been reset to 0.", "success")
+    return _users_redirect()

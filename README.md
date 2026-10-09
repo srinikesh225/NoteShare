@@ -43,7 +43,10 @@ It is built with Python (Flask), MySQL, Jinja2 templates, plain CSS and a little
   - accessible forms
 - **Search engines and sharing:** page titles and descriptions, sitemap, robots.txt,
   structured data and a share image.
-- **Automated tests:** 270 pytest tests against a separate MySQL test database.
+- **User management for moderators:** a Users page listing every student with warnings, ban
+  status and uploads, a search by name or email, and confirmed *Unban* and *Reset warnings*
+  actions.
+- **Automated tests:** 290 pytest tests against a separate MySQL test database.
 
 ### Quick start (after the one-time setup in sections 6–13)
 
@@ -76,6 +79,7 @@ The application was built in phases; the sections below document each one:
   Notes, delete — plus search-engine and sharing support ([section 24](#24-phase-3-core-note-features))
 - **Phase 4: ratings, reports, moderation and subjects** ([section 25](#25-phase-4-ratings-reports-moderation-and-subjects))
 - **Phase 5: UI polish, automated testing and documentation** ([section 26](#26-phase-5-ui-polish-testing-and-documentation))
+- **Moderator user management** ([section 27](#27-moderator-user-management))
 
 ## 2. Phase 1 scope
 
@@ -134,6 +138,7 @@ NoteShare/
 │   ├── note_detail.html
 │   ├── my_notes.html
 │   ├── moderation.html   # Open reports grouped by note
+│   ├── moderation_users.html  # Students: warnings, bans, unban / reset warnings
 │   ├── admin_subjects.html
 │   ├── admin_subject_form.html
 │   ├── register.html
@@ -160,6 +165,7 @@ NoteShare/
 │   ├── test_auth.py      # Phase 2
 │   ├── test_notes.py     # Phase 3
 │   ├── test_seo.py       # Titles, headings, canonical/robots, sitemap, structured data
+│   ├── test_moderation_users.py  # Users page, unban, reset warnings
 │   └── test_phase4.py    # Ratings, reports, flagging, moderation, subjects, end-to-end
 └── uploads/              # Uploaded note files (UUID names); contents are git-ignored
 ```
@@ -642,7 +648,7 @@ per request.
 | ---------- | ---------- |
 | Signed out | Browse, Log in, Register |
 | Student    | Browse, Upload, My Notes, account name, Log out |
-| Moderator  | the student items + Reports |
+| Moderator  | the student items + Reports + Users |
 | Admin      | the moderator items + Subjects |
 
 Each navigation item is tied to an endpoint name in `auth.NAV_ITEMS` (`notes.browse`,
@@ -702,7 +708,7 @@ navigation per role, cookie flags, escaping of user input, and form-value preser
 - No password reset, email verification, "remember me", or account editing.
 - No login rate limiting or account lockout; add it before a public deployment.
 - Promoting or demoting users is done in MySQL. Banning is done from the moderation
-  dashboard (section 25.5); un-banning is done in MySQL.
+  dashboard (section 25.5); un-banning and resetting warnings on the Users page (section 27).
 - No Privacy Policy or Terms pages yet; both are needed before a public launch.
 
 ## 24. Phase 3: Core Note Features
@@ -885,6 +891,9 @@ is one new nullable column, `reports.details` (section 25.8).
 | `/moderation/note/<id>/remove` | POST | moderators, admins | Hide the note; close open reports |
 | `/moderation/note/<id>/warn` | POST | moderators, admins | Add a warning to the uploader |
 | `/moderation/note/<id>/ban` | POST | moderators, admins | Suspend the uploader |
+| `/moderation/users` | GET | moderators, admins | Students with warnings, bans and uploads (section 27) |
+| `/moderation/users/<id>/unban` | POST | moderators, admins | Unban a student |
+| `/moderation/users/<id>/reset-warnings` | POST | moderators, admins | Set a student's warnings to 0 |
 | `/admin/subjects` | GET | admins | List subjects with note counts |
 | `/admin/subjects/add` | GET, POST | admins | Add a subject |
 | `/admin/subjects/<id>/edit` | GET, POST | admins | Edit a subject |
@@ -1103,7 +1112,7 @@ against the MySQL test database:
 
 ```powershell
 python -m pip install -r requirements-dev.txt
-python -m pytest -v                       # all 270 tests (about 2.5 minutes)
+python -m pytest -v                       # all 290 tests (about 4 minutes)
 python -m pytest tests/test_app.py -v     # the main scenarios only
 ```
 
@@ -1125,3 +1134,68 @@ All the variables the app reads, set in `.env` (copy it from `.env.example`; sec
 | `TEST_DATABASE_URL` | for tests | Address of the separate `noteshare_test` database |
 
 Never commit `.env`, and never put real passwords or keys in the README.
+
+## 27. Moderator user management
+
+Moderators and admins have a **Users** page, linked in the navigation and from the
+moderation dashboard (*Manage users*).
+
+### 27.1 The Users page: `/moderation/users`
+
+- **Access:** moderators and admins only. Students get **403 Access denied**; signed-out
+  visitors are sent to log in.
+- **What it shows:** a table of every **student** account with:
+  - name and email
+  - warnings, shown as "1 of 3"
+  - status, **Active** or **Banned** (written in words, not shown by colour alone)
+  - number of uploads
+- **Not listed:** moderator and admin accounts, so staff accounts can't be changed from
+  this page.
+- **Search:** finds students by name or email. It ignores letter case, and `%` and `_` are
+  matched literally rather than as wildcards.
+- **Paging:** 25 students per page, sorted by name.
+- **Empty states:**
+  - no students yet: *"No student accounts yet."*
+  - nothing matches the search: *"No students match …"*, with a *Clear search* button
+
+### 27.2 Actions
+
+Each row offers only the actions that apply:
+
+| Action | Shown when | What it does |
+| ------ | ---------- | ------------ |
+| **Unban** | the student is banned | `is_banned` becomes false, so they can log in again. Their warnings are **not** changed. |
+| **Reset warnings** | the student has 1 or more warnings | `warnings` becomes 0. Their ban status is **not** changed. |
+
+- **Confirmation:** both open a confirmation panel ("Are you sure you want to unban …?")
+  with a separate *Yes* button, and show a success message afterwards, e.g. *"Bina Banned
+  has been unbanned and can log in again."*
+- **The two actions are independent.** A student suspended automatically at 3 warnings who
+  is only unbanned still has 3 warnings, so their next warning suspends them again. The
+  confirmation panel warns about this. To give a full fresh start, use both actions.
+- **Safety:**
+  - both actions are POST-only (GET gets 405) and need a CSRF token (400 otherwise)
+  - they check the moderator role on the server (students get 403)
+  - they only change **student** accounts; a moderator or admin account gets 404
+  - repeating an action is harmless ("Sam has no warnings.")
+  - after an action you return to the same search and page
+  - each action is written to the application log with the moderator's id
+
+### 27.3 Tests
+
+`tests/test_moderation_users.py` (20 tests):
+- **Required:** a moderator can unban, a moderator can reset warnings, a student can't open
+  `/moderation/users` (or post its actions), and an unbanned student can log in again.
+- **Also covered:**
+  - admin access
+  - only students are listed, with correct uploads and status
+  - buttons appear only when they apply
+  - search
+  - you stay on the same search and page after an action
+  - repeated actions are harmless
+  - staff accounts are refused
+  - POST and CSRF are required
+  - the navigation link
+  - the empty state
+
+Results are in [docs/test_cases.md](docs/test_cases.md) (TC-38 to TC-44).

@@ -56,7 +56,7 @@ styles.
 
 | Example (real) | Where | How it helps |
 | -------------- | ----- | ------------ |
-| **One shared layout.** Every page is built on `base.html`: the same header with the NoteShare logo, search box, navigation (Browse, Upload, My Notes, plus Reports for moderators and Subjects for admins), account button and footer. | All pages | Navigation is always in the same place. |
+| **One shared layout.** Every page is built on `base.html`: the same header with the NoteShare logo, search box, navigation (Browse, Upload, My Notes, plus Reports and Users for moderators, and Subjects for admins), account button and footer. | All pages | Navigation is always in the same place. |
 | **The same button styles everywhere.** Black = main action (*Upload note*, *Apply*, *Submit rating*); white with a border = secondary (*View details*, *Cancel*, *Dismiss reports*); red outline that opens a confirmation = destructive (*Delete*, *Remove note*, *Ban uploader*). | All pages | The colour and style tell the user what a button will do before they click. |
 | **The same form pattern.** Label above the field, hint in grey, red message below the field when something is wrong, and, on forms with several fields, the same "Please correct the highlighted fields." message at the top. | All forms | Every form is filled in and corrected the same way. |
 | **The same confirmation pattern** for every destructive action (a panel with a red "Yes, …" button). | My Notes, note page, moderation, subjects | Users recognise the safety step everywhere. |
