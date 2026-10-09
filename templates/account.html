@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Your account{% endblock %}
+{% block description %}Your NoteShare account details.{% endblock %}
+
+{% block content %}
+<section class="page" aria-labelledby="account-heading">
+  <h1 id="account-heading">Your account</h1>
+
+  <dl class="details">
+    <div><dt>Name</dt><dd>{{ user.name }}</dd></div>
+    <div><dt>Email</dt><dd>{{ user.email }}</dd></div>
+    <div><dt>Role</dt><dd>{{ user.role|capitalize }}</dd></div>
+    <div><dt>Branch</dt><dd>{{ user.branch or "Not set" }}</dd></div>
+    <div><dt>Year</dt><dd>{{ "Year %d"|format(user.year) if user.year else "Not set" }}</dd></div>
+    <div><dt>Member since</dt><dd><time datetime="{{ user.created_at.isoformat() }}">{{ user.created_at.strftime("%d %B %Y") }}</time></dd></div>
+  </dl>
+</section>
+{% endblock %}

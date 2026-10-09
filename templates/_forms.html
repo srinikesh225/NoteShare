@@ -1,0 +1,31 @@
+{#
+  Form helpers shared by the auth pages.
+
+  input_field(name, label, errors, value, type, hint, **attrs)
+    Renders label, optional hint, input and its inline error. Extra keyword
+    arguments become HTML attributes (True -> bare attribute, False/None ->
+    omitted). Values are escaped by Jinja; never pass a password as `value`.
+#}
+{% macro field_error(name, errors) -%}
+  {% if errors.get(name) %}<p class="field-error" id="{{ name }}-error"><span class="visually-hidden">Error: </span>{{ errors[name] }}</p>{% endif %}
+{%- endmacro %}
+
+{% macro described_by(name, errors, hint) -%}
+  {% set ids = ([name ~ '-hint'] if hint else []) + ([name ~ '-error'] if errors.get(name) else []) %}
+  {%- if ids %} aria-describedby="{{ ids|join(' ') }}"{% endif %}
+  {%- if errors.get(name) %} aria-invalid="true"{% endif %}
+{%- endmacro %}
+
+{% macro input_field(name, label, errors, value='', type='text', hint=none) -%}
+  <div class="field{% if errors.get(name) %} field--invalid{% endif %}">
+    <label for="{{ name }}">{{ label }}</label>
+    {% if hint %}<p class="field-hint" id="{{ name }}-hint">{{ hint }}</p>{% endif %}
+    <input id="{{ name }}" name="{{ name }}" type="{{ type }}"
+      {%- if value %} value="{{ value }}"{% endif %}
+      {%- for key, val in kwargs.items() %}
+        {%- if val is sameas true %} {{ key }}{% elif val is not sameas false and val is not none %} {{ key }}="{{ val }}"{% endif %}
+      {%- endfor %}
+      {{- described_by(name, errors, hint) }}>
+    {{ field_error(name, errors) }}
+  </div>
+{%- endmacro %}

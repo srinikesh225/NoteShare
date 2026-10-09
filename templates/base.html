@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} · NoteShare</title>
+  <meta name="description" content="{% block description %}NoteShare is a notes-sharing platform where college students share study notes by subject and semester.{% endblock %}">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container header-inner{% if current_user %} header-inner--signed-in{% endif %}">
+      <a class="wordmark" href="{{ url_for('index') }}">
+        <svg class="wordmark-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+          <path d="M4 2h18l6 6v22H4z" fill="currentColor"/>
+          <path d="M22 2v6h6z" fill="#9fb3e0"/>
+          <path d="M10 23V11h2.2l5.8 8.2V11h2v12h-2.2L12 14.8V23z" fill="#fff"/>
+        </svg>
+        <span>NoteShare</span>
+      </a>
+
+      <form class="search" role="search"{% if search_url %} action="{{ search_url }}" method="get"{% endif %}>
+        <label for="site-search" class="visually-hidden">Search notes</label>
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+        </svg>
+        {% if search_url %}
+          <input id="site-search" type="search" name="q" placeholder="Search notes by title or subject">
+        {% else %}
+          <input id="site-search" type="search" name="q" placeholder="Search is coming soon" disabled>
+        {% endif %}
+      </form>
+
+      {% if current_user %}
+        <nav class="main-nav" aria-label="Main">
+          <ul>
+            {% for item in nav_items %}
+              <li>
+                {% if item.url %}
+                  <a class="nav-link{% if request.endpoint == item.endpoint %} is-active{% endif %}" href="{{ item.url }}"
+                     {%- if request.endpoint == item.endpoint %} aria-current="page"{% endif %}>{{ item.label }}</a>
+                {% else %}
+                  <span class="nav-link is-disabled" aria-disabled="true">{{ item.label }} <span class="soon">Soon</span></span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </nav>
+
+        <div class="account-controls">
+          <a class="account-link{% if request.endpoint == 'auth.account' %} is-active{% endif %}" href="{{ url_for('auth.account') }}"
+             {%- if request.endpoint == 'auth.account' %} aria-current="page"{% endif %}>
+            <span class="account-name">{{ current_user.name }}</span>
+            <span class="role-badge">{{ current_user.role|capitalize }}</span>
+          </a>
+          <form method="post" action="{{ url_for('auth.logout') }}" class="logout-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="button button--secondary button--small">Log out</button>
+          </form>
+        </div>
+      {% else %}
+        <nav class="account-controls" aria-label="Account">
+          <a class="nav-link{% if request.endpoint == 'auth.login' %} is-active{% endif %}" href="{{ url_for('auth.login') }}">Log in</a>
+          <a class="button button--primary button--small" href="{{ url_for('auth.register') }}">Register</a>
+        </nav>
+      {% endif %}
+    </div>
+  </header>
+
+  <main id="main" class="site-main {% block main_class %}{% endblock %}" tabindex="-1">
+    <div class="container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-stack">
+            {% for category, message in messages %}
+              {% set kind = category if category in ['success', 'error', 'warning', 'info'] else 'info' %}
+              <div class="flash flash--{{ kind }}" role="{{ 'alert' if kind in ['error', 'warning'] else 'status' }}">
+                <p>{{ message }}</p>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p><strong>NoteShare</strong> — study notes shared by students, organised by subject and semester.</p>
+    </div>
+  </footer>
+</body>
+</html>

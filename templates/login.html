@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_forms.html" import input_field %}
+
+{% block title %}Log in{% endblock %}
+{% block description %}Log in to your NoteShare account.{% endblock %}
+
+{% block main_class %}site-main--narrow{% endblock %}
+
+{% block content %}
+<section class="auth" aria-labelledby="login-heading">
+  <h1 id="login-heading">Log in to NoteShare</h1>
+  <p class="auth-intro">Use the college email and password you registered with.</p>
+
+  <form method="post" action="{{ url_for('auth.login') }}" class="form-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+
+    {{ input_field('email', 'College email', errors, form.email, type='email',
+                   autocomplete='email', required=true, spellcheck='false') }}
+
+    {{ input_field('password', 'Password', errors, type='password',
+                   autocomplete='current-password', required=true) }}
+
+    <button type="submit" class="button button--primary button--block">Log in</button>
+  </form>
+
+  <p class="auth-switch">New to NoteShare? <a href="{{ url_for('auth.register') }}">Create a student account</a></p>
+</section>
+{% endblock %}

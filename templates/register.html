@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_forms.html" import input_field, field_error, described_by %}
+
+{% block title %}Create a student account{% endblock %}
+{% block description %}Create a NoteShare student account with your college email to share and rate study notes.{% endblock %}
+
+{% block main_class %}site-main--narrow{% endblock %}
+
+{% block content %}
+<section class="auth" aria-labelledby="register-heading">
+  <h1 id="register-heading">Create your student account</h1>
+  <p class="auth-intro">Use your college email. Your branch and year help classmates find notes for the courses they are taking.</p>
+
+  <form method="post" action="{{ url_for('auth.register') }}" class="form-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {{ input_field('name', 'Full name', errors, form.name,
+                   autocomplete='name', required=true, maxlength=100) }}
+
+    {{ input_field('email', 'College email', errors, form.email, type='email',
+                   autocomplete='email', required=true, maxlength=255, spellcheck='false') }}
+
+    {{ input_field('password', 'Password', errors, type='password', hint='At least 8 characters.',
+                   autocomplete='new-password', required=true, minlength=8, maxlength=128) }}
+
+    {{ input_field('branch', 'Branch', errors, form.branch,
+                   hint='For example, Computer Science and Engineering.',
+                   autocomplete='off', required=true, maxlength=100) }}
+
+    <div class="field{% if errors.get('year') %} field--invalid{% endif %}">
+      <label for="year">Year of study</label>
+      <select id="year" name="year" required{{ described_by('year', errors, none) }}>
+        <option value=""{% if not form.year %} selected{% endif %}>Select your year</option>
+        {% for y in years %}
+          <option value="{{ y }}"{% if form.year == y|string %} selected{% endif %}>Year {{ y }}</option>
+        {% endfor %}
+      </select>
+      {{ field_error('year', errors) }}
+    </div>
+
+    <button type="submit" class="button button--primary button--block">Create account</button>
+  </form>
+
+  <p class="auth-switch">Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a></p>
+</section>
+{% endblock %}
