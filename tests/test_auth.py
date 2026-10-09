@@ -166,7 +166,7 @@ def test_06_valid_login_creates_session_and_redirects(client, make_user):
     user_id = make_user(email="asha@college.example", password="correct-password")
     response = log_in(client, "  ASHA@college.example ", "correct-password")
     assert response.status_code == 302
-    assert response.headers["Location"] == "/account"
+    assert response.headers["Location"] == "/"
     assert session_user_id(client) == user_id
 
     follow = client.get("/account")
@@ -229,14 +229,14 @@ def test_login_honours_safe_next_url(client, make_user):
 def test_login_rejects_unsafe_next_url(client, make_user, evil):
     make_user()
     response = log_in(client, "asha@college.example", "correct-password", next_url=evil)
-    assert response.headers["Location"] == "/account"
+    assert response.headers["Location"] == "/"
 
 
 def test_signed_in_user_visiting_login_or_register_is_redirected(client, make_user):
     make_user()
     log_in(client, "asha@college.example", "correct-password")
-    assert client.get("/login").headers["Location"] == "/account"
-    assert client.get("/register").headers["Location"] == "/account"
+    assert client.get("/login").headers["Location"] == "/"
+    assert client.get("/register").headers["Location"] == "/"
 
 
 # ---------------------------------------------------------------------------
@@ -413,20 +413,25 @@ def test_navigation_for_anonymous_visitor(client):
     body = page(client.get("/login"))
     assert 'href="/login"' in body and 'href="/register"' in body
     assert "Log out" not in body
-    assert "Browse" not in body
+    assert 'href="/">Browse</a>' in body
+    assert 'href="/upload"' not in body and 'href="/my-notes"' not in body
 
 
-@pytest.mark.parametrize("role, visible, hidden", [
-    ("student", ["Browse", "Upload", "My Notes"], ["Reports", "Subjects"]),
-    ("moderator", ["Browse", "Upload", "My Notes", "Reports"], ["Subjects"]),
-    ("admin", ["Browse", "Upload", "My Notes", "Reports", "Subjects"], []),
+# Browse, Upload and My Notes are real pages since Phase 3; Reports and
+# Subjects stay as disabled "Soon" placeholders until their phases.
+@pytest.mark.parametrize("role, links, soon, hidden", [
+    ("student", ["Browse", "Upload", "My Notes"], [], ["Reports", "Subjects"]),
+    ("moderator", ["Browse", "Upload", "My Notes"], ["Reports"], ["Subjects"]),
+    ("admin", ["Browse", "Upload", "My Notes"], ["Reports", "Subjects"], []),
 ])
-def test_navigation_by_role(client, make_user, role, visible, hidden):
+def test_navigation_by_role(client, make_user, role, links, soon, hidden):
     make_user(email=f"{role}@college.example", role=role)
     log_in(client, f"{role}@college.example", "correct-password")
     body = page(client.get("/account"))
     nav = body[body.index('aria-label="Main"'):body.index("</nav>", body.index('aria-label="Main"'))]
-    for label in visible:
+    for label in links:
+        assert f">{label}</a>" in nav
+    for label in soon:
         assert f"{label} <span class=\"soon\">Soon</span>" in nav
     for label in hidden:
         assert label not in nav
@@ -441,11 +446,13 @@ def test_session_cookie_flags(client, make_user):
     assert "SameSite=Lax" in cookie
 
 
-def test_root_redirects_by_login_state(client, make_user):
-    assert client.get("/").headers["Location"] == "/login"
+def test_root_is_the_browse_page_for_everyone(client, make_user):
+    assert client.get("/").status_code == 200
     make_user()
     log_in(client, "asha@college.example", "correct-password")
-    assert client.get("/").headers["Location"] == "/account"
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Browse notes" in page(response)
 
 
 def test_account_page_shows_database_values(client, make_user):

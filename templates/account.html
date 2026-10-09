@@ -1,7 +1,11 @@
 {% extends "base.html" %}
+{% from "_layout.html" import breadcrumbs %}
 
 {% block title %}Your account{% endblock %}
 {% block description %}Your NoteShare account details.{% endblock %}
+{% block robots %}noindex, follow{% endblock %}
+
+{% block breadcrumbs %}{{ breadcrumbs([("Browse notes", url_for("notes.browse")), ("Your account", none)]) }}{% endblock %}
 
 {% block content %}
 <section class="page" aria-labelledby="account-heading">

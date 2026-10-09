@@ -1,0 +1,79 @@
+{# Macros shared by the note pages: cards, ratings, status labels, pagination. #}
+
+{% macro star_icon(filled=true) -%}
+  <svg class="star{% if not filled %} star--empty{% endif %}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+{%- endmacro %}
+
+{# Average from Note.avg_rating. Ratings are 1-5 stars, so 0 means "no ratings". #}
+{% macro rating_summary(average) -%}
+  {% if average and average > 0 -%}
+    <span class="rating">{{ star_icon() }}<span>{{ "%.1f"|format(average) }}</span><span class="visually-hidden"> out of 5</span></span>
+  {%- else -%}
+    <span class="rating rating--none">No ratings yet</span>
+  {%- endif %}
+{%- endmacro %}
+
+{% macro star_row(stars) -%}
+  <span class="star-row" role="img" aria-label="{{ stars }} out of 5 stars">
+    {%- for i in range(1, 6) %}{{ star_icon(i <= stars) }}{% endfor -%}
+  </span>
+{%- endmacro %}
+
+{% macro status_badge(status, label) -%}
+  <span class="status status--{{ status }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro note_card(note, back) -%}
+  <article class="note-card">
+    <p class="note-card-subject">
+      <span class="subject-code">{{ note.subject.code }}</span>
+      <span class="note-card-subject-name">{{ note.subject.name }}</span>
+    </p>
+    <h2 class="note-card-title" title="{{ note.title }}">{{ note.title }}</h2>
+    <p class="note-card-meta">
+      Semester {{ note.subject.semester }} · {{ note.uploader.name }} ·
+      <time datetime="{{ note.upload_date.isoformat() }}">{{ note.upload_date|ui_date }}</time>
+    </p>
+    <dl class="note-card-stats">
+      <div><dt>Rating</dt><dd>{{ rating_summary(note.avg_rating) }}</dd></div>
+      <div><dt>Downloads</dt><dd>{{ note.download_count }}</dd></div>
+    </dl>
+    <a class="button button--secondary button--small note-card-link"
+       href="{{ url_for('notes.detail', note_id=note.id, back=back) }}">View details<span class="visually-hidden">: {{ note.title }}</span></a>
+  </article>
+{%- endmacro %}
+
+{# Pagination links that keep every active filter in `args`. #}
+{% macro pager(pagination, endpoint, args) -%}
+  {% if pagination.pages > 1 %}
+  <nav class="pagination" aria-label="Pagination">
+    <ul>
+      <li>
+        {% if pagination.has_prev %}
+          <a class="page-link" rel="prev" href="{{ url_for(endpoint, page=pagination.prev_num, **args) }}">Previous</a>
+        {% else %}
+          <span class="page-link is-disabled" aria-disabled="true">Previous</span>
+        {% endif %}
+      </li>
+      {% for number in pagination.iter_pages(left_edge=1, left_current=1, right_current=2, right_edge=1) %}
+        <li class="page-number">
+          {% if number is none %}
+            <span class="page-gap" aria-hidden="true">…</span>
+          {% elif number == pagination.page %}
+            <span class="page-link is-current" aria-current="page"><span class="visually-hidden">Page </span>{{ number }}</span>
+          {% else %}
+            <a class="page-link" href="{{ url_for(endpoint, page=number, **args) }}"><span class="visually-hidden">Page </span>{{ number }}</a>
+          {% endif %}
+        </li>
+      {% endfor %}
+      <li>
+        {% if pagination.has_next %}
+          <a class="page-link" rel="next" href="{{ url_for(endpoint, page=pagination.next_num, **args) }}">Next</a>
+        {% else %}
+          <span class="page-link is-disabled" aria-disabled="true">Next</span>
+        {% endif %}
+      </li>
+    </ul>
+  </nav>
+  {% endif %}
+{%- endmacro %}

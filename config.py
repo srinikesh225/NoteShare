@@ -11,6 +11,7 @@ the required settings are present before the application starts.
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from sqlalchemy.engine import make_url
@@ -66,6 +67,13 @@ class Config:
     # CSRF (Flask-WTF). Tokens are bound to the session and stay valid for as
     # long as it does, so a form left open for a while still submits.
     WTF_CSRF_TIME_LIMIT = None
+
+    # Public address of the site, e.g. https://noteshare.example.edu. Used for
+    # canonical links, the sitemap, robots.txt and social-share tags. When it
+    # is empty (local development) the address of the current request is
+    # used instead. Set it in production so those URLs cannot be influenced
+    # by the request's Host header.
+    SITE_URL = os.environ.get("SITE_URL", "").strip().rstrip("/")
 
     # --- Database (Flask-SQLAlchemy reads SQLALCHEMY_DATABASE_URI) ----------
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "").strip()
@@ -136,6 +144,14 @@ class Config:
                 f"SECRET_KEY is too short ({len(cls.SECRET_KEY)} characters). "
                 f"Use at least {_MIN_SECRET_KEY_LENGTH} random characters."
             )
+
+        if cls.SITE_URL:
+            parts = urlsplit(cls.SITE_URL)
+            if parts.scheme not in ("http", "https") or not parts.netloc or parts.path or parts.query:
+                problems.append(
+                    "SITE_URL must be just the site's address, like https://noteshare.example.edu "
+                    "(no path or query string). Leave it empty for local development."
+                )
 
         if problems:
             details = "\n".join(f"- {p}" for p in problems)

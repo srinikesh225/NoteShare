@@ -36,7 +36,7 @@ INVALID_CREDENTIALS_MESSAGE = "Invalid email or password."
 DUPLICATE_EMAIL_MESSAGE = "An account with this email already exists."
 
 # Where users land after logging in when no (safe) `next` URL was given.
-DEFAULT_ENDPOINT = "auth.account"
+DEFAULT_ENDPOINT = "notes.browse"
 
 NAME_MAX_LENGTH = User.name.type.length        # 100
 EMAIL_MAX_LENGTH = User.email.type.length      # 255
@@ -63,7 +63,7 @@ NAV_ITEMS = [
     ("Reports", "moderation.reports", "moderator"),
     ("Subjects", "admin.subjects", "admin"),
 ]
-SEARCH_ENDPOINT = "notes.search"
+SEARCH_ENDPOINT = "notes.browse"  # the homepage handles ?q= searches
 
 
 # --------------------------------------------------------------------------

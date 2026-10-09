@@ -10,3 +10,17 @@ document.querySelectorAll(".flash").forEach((flash) => {
   button.addEventListener("click", () => flash.remove());
   flash.appendChild(button);
 });
+
+// Warn about files over the upload limit before they are sent. The server
+// enforces the same limit (MAX_CONTENT_LENGTH) regardless.
+document.querySelectorAll("input[type=file][data-max-bytes]").forEach((input) => {
+  const maxBytes = Number(input.dataset.maxBytes);
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    const tooLarge = file && file.size > maxBytes;
+    input.setCustomValidity(
+      tooLarge ? "This file is larger than the 10 MiB limit. Choose a smaller file." : ""
+    );
+    if (tooLarge) input.reportValidity();
+  });
+});

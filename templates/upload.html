@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "_forms.html" import input_field, field_error, described_by %}
+{% from "_layout.html" import breadcrumbs %}
+
+{% block title %}Upload a note{% endblock %}
+{% block description %}Upload study notes for one of your subjects on NoteShare.{% endblock %}
+{% block robots %}noindex, follow{% endblock %}
+
+{% block breadcrumbs %}{{ breadcrumbs([("Browse notes", url_for("notes.browse")), ("Upload a note", none)]) }}{% endblock %}
+
+{% block content %}
+<section class="page" aria-labelledby="upload-heading">
+  <h1 id="upload-heading">Upload a note</h1>
+  <p class="page-intro">Share notes for one of your subjects. Once uploaded, signed-in students can view and download them.</p>
+
+  {% if not subjects %}
+    <div class="empty-state">
+      <h2>No subjects are available yet.</h2>
+      <p>Notes are filed under a subject, and none have been added. An administrator needs to add subjects before notes can be uploaded.</p>
+    </div>
+  {% else %}
+  <form method="post" action="{{ url_for('notes.upload') }}" enctype="multipart/form-data" class="form-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {{ input_field('title', 'Title', errors, form.title,
+                   hint='For example, “Graph Algorithms — Unit 3 notes”.',
+                   required=true, maxlength=title_max) }}
+
+    <div class="field{% if errors.get('description') %} field--invalid{% endif %}">
+      <label for="description">Description <span class="optional">(optional)</span></label>
+      <p class="field-hint" id="description-hint">What the notes cover, which unit or lecturer, anything that helps others decide. Up to {{ "{:,}".format(description_max) }} characters.</p>
+      <textarea id="description" name="description" rows="5" maxlength="{{ description_max }}"
+        {{- described_by('description', errors, true) }}>{{ form.description }}</textarea>
+      {{ field_error('description', errors) }}
+    </div>
+
+    <div class="field{% if errors.get('subject_id') %} field--invalid{% endif %}">
+      <label for="subject_id">Subject</label>
+      <select id="subject_id" name="subject_id" required{{ described_by('subject_id', errors, none) }}>
+        <option value=""{% if not form.subject_id %} selected{% endif %}>Choose a subject</option>
+        {% for sem in semesters %}
+          <optgroup label="Semester {{ sem }}">
+            {% for subject in subjects if subject.semester == sem %}
+              <option value="{{ subject.id }}"{% if form.subject_id == subject.id|string %} selected{% endif %}>{{ subject.code }} — {{ subject.name }} (Semester {{ subject.semester }})</option>
+            {% endfor %}
+          </optgroup>
+        {% endfor %}
+      </select>
+      {{ field_error('subject_id', errors) }}
+    </div>
+
+    <div class="field{% if errors.get('file') %} field--invalid{% endif %}">
+      <label for="file">File</label>
+      <p class="field-hint" id="file-hint">PDF, Word (.docx), PowerPoint (.pptx), JPG or PNG. Maximum 10 MiB.</p>
+      <input id="file" name="file" type="file" required accept="{{ accept }}" data-max-bytes="{{ max_bytes }}"
+        {{- described_by('file', errors, true) }}>
+      {{ field_error('file', errors) }}
+    </div>
+
+    <p class="form-note">Only upload notes you wrote yourself or have permission to share.</p>
+
+    <button type="submit" class="button button--primary button--block">Upload note</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

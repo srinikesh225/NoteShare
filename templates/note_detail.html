@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% from "_notes.html" import star_icon, star_row, status_badge %}
+{% from "_layout.html" import breadcrumbs %}
+
+{% block title %}{{ note.title }} — {{ note.subject.code }} notes{% endblock %}
+{% block description -%}
+  {%- if note.description -%}
+    {{ note.description|replace("\n", " ")|truncate(150, killwords=false, end="…") }}
+  {%- else -%}
+    {{ note.title }}: {{ note.subject.code }} {{ note.subject.name }} notes for semester {{ note.subject.semester }}, shared on NoteShare.
+  {%- endif -%}
+{%- endblock %}
+{% block robots %}{{ "index, follow" if note.status == "active" else "noindex, nofollow" }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block main_class %}site-main--wide{% endblock %}
+
+{% block structured_data %}
+{%- if note.status == "active" %}
+  {%- set resource = {
+    "@context": "https://schema.org",
+    "@type": "LearningResource",
+    "name": note.title,
+    "url": absolute_url(url_for('notes.detail', note_id=note.id)),
+    "learningResourceType": "Lecture notes",
+    "educationalLevel": "Undergraduate",
+    "isAccessibleForFree": true,
+    "inLanguage": "en",
+    "datePublished": note.upload_date.strftime("%Y-%m-%d"),
+    "author": {"@type": "Person", "name": note.uploader.name},
+    "about": {"@type": "Thing", "name": note.subject.code ~ " " ~ note.subject.name},
+    "encodingFormat": file_mime,
+  } %}
+  {%- if note.description %}{% set _ = resource.update({"description": note.description}) %}{% endif %}
+  {%- if rating_count %}
+    {%- set _ = resource.update({"aggregateRating": {"@type": "AggregateRating",
+        "ratingValue": rating_average, "ratingCount": rating_count, "bestRating": 5, "worstRating": 1}}) %}
+  {%- endif %}
+  <script type="application/ld+json">{{ resource|tojson }}</script>
+  <script type="application/ld+json">{{ {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Browse notes", "item": absolute_url(url_for('notes.browse'))},
+      {"@type": "ListItem", "position": 2, "name": note.subject.code ~ " " ~ note.subject.name,
+       "item": absolute_url(url_for('notes.browse', subject=note.subject.id))},
+      {"@type": "ListItem", "position": 3, "name": note.title}
+    ]
+  }|tojson }}</script>
+{%- endif %}
+{% endblock %}
+
+{% block breadcrumbs %}
+  {{ breadcrumbs([
+    ("Browse notes", url_for('notes.browse')),
+    (note.subject.code ~ " " ~ note.subject.name, url_for('notes.browse', subject=note.subject.id)),
+    (note.title, none),
+  ]) }}
+{% endblock %}
+
+{% block content %}
+<article class="note-detail" aria-labelledby="note-title">
+  {% if back_url %}
+    <p class="back-link"><a href="{{ back_url }}">Back to results</a></p>
+  {% endif %}
+
+  {% if note.status != "active" %}
+    <div class="status-banner status-banner--{{ note.status }}" role="note">
+      <p><strong>Status: {{ status_label }}.</strong>
+        {% if note.status == "flagged" %}
+          This note has been reported and is hidden from other students while a moderator reviews it.
+        {% else %}
+          A moderator has removed this note. It is hidden from other students.
+        {% endif %}
+      </p>
+    </div>
+  {% endif %}
+
+  <header class="note-header">
+    <p class="note-subject">
+      <a class="subject-code" href="{{ url_for('notes.browse', subject=note.subject.id) }}">{{ note.subject.code }}</a>
+      <a href="{{ url_for('notes.browse', subject=note.subject.id) }}">{{ note.subject.name }}</a> ·
+      <a href="{{ url_for('notes.browse', semester=note.subject.semester) }}">Semester {{ note.subject.semester }}</a>
+    </p>
+    <h1 id="note-title">{{ note.title }}</h1>
+  </header>
+
+  <div class="note-layout">
+    <div class="note-main">
+      <section aria-labelledby="about-heading">
+        <h2 id="about-heading" class="section-heading">About these notes</h2>
+        {% if note.description %}
+          <p class="note-description">{{ note.description }}</p>
+        {% else %}
+          <p class="muted">The uploader didn't add a description.</p>
+        {% endif %}
+      </section>
+
+      <section aria-labelledby="reviews-heading">
+        <h2 id="reviews-heading" class="section-heading">Reviews</h2>
+        {% if ratings %}
+          <ul class="reviews" role="list">
+            {% for rating in ratings %}
+              <li class="review">
+                <div class="review-header">
+                  <span class="review-author">{{ rating.student.name }}</span>
+                  {{ star_row(rating.stars) }}
+                  <time class="review-date" datetime="{{ rating.date.isoformat() }}">{{ rating.date|ui_date }}</time>
+                </div>
+                {% if rating.comment %}<p class="review-comment">{{ rating.comment }}</p>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No ratings yet.</p>
+        {% endif %}
+      </section>
+    </div>
+
+    <aside class="note-aside" aria-label="Note summary">
+      <div class="summary-card">
+        <div class="rating-summary">
+          {% if rating_count %}
+            <p class="rating-big">{{ star_icon() }}<span>{{ "%.1f"|format(rating_average) }}</span><span class="rating-out-of">/ 5</span></p>
+            <p class="muted">from {{ rating_count }} rating{{ "s" if rating_count != 1 }}</p>
+          {% else %}
+            <p class="rating-none">No ratings yet.</p>
+          {% endif %}
+        </div>
+
+        <dl class="summary-list">
+          <div><dt>Uploaded by</dt><dd>{{ note.uploader.name }}</dd></div>
+          <div><dt>Uploaded</dt><dd><time datetime="{{ note.upload_date.isoformat() }}">{{ note.upload_date|ui_date }}</time></dd></div>
+          <div><dt>Downloads</dt><dd>{{ note.download_count }}</dd></div>
+          <div><dt>Format</dt><dd>{{ file_type }}</dd></div>
+          {% if is_owner or note.status != "active" %}
+            <div><dt>Status</dt><dd>{{ status_badge(note.status, status_label) }}</dd></div>
+          {% endif %}
+        </dl>
+
+        {% if current_user %}
+          <a class="button button--primary button--block" href="{{ url_for('notes.download', note_id=note.id) }}">Download {{ file_type }}</a>
+        {% else %}
+          <a class="button button--primary button--block" href="{{ url_for('auth.login', next=url_for('notes.detail', note_id=note.id)) }}">Log in to download</a>
+          <p class="muted small">Downloads are available to signed-in students.</p>
+        {% endif %}
+
+        {% if is_owner %}
+          <details class="confirm-delete">
+            <summary class="button button--danger-outline button--block">Delete this note</summary>
+            <form method="post" action="{{ url_for('notes.delete', note_id=note.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <p>This permanently deletes the note, its file, and its ratings. This can't be undone.</p>
+              <button type="submit" class="button button--danger button--block">Yes, delete permanently</button>
+            </form>
+          </details>
+        {% endif %}
+      </div>
+    </aside>
+  </div>
+</article>
+{% endblock %}

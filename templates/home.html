@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% from "_notes.html" import note_card, pager %}
+
+{#- One name per listing, used for the title, heading and description. #}
+{%- set listing_name -%}
+  {%- if selected_subject -%}{{ selected_subject.code }} {{ selected_subject.name }} notes
+  {%- elif semester -%}Semester {{ semester }} notes
+  {%- else -%}Browse notes{%- endif -%}
+{%- endset %}
+
+{% block title %}{% if q %}“{{ q }}” in {% endif %}{{ listing_name }}{% if page > 1 %} — page {{ page }}{% endif %}{% endblock %}
+{% block description -%}
+  {%- if selected_subject -%}
+    Study notes for {{ selected_subject.code }} {{ selected_subject.name }} (semester {{ selected_subject.semester }}), shared by college students on NoteShare.
+  {%- elif semester -%}
+    Study notes for semester {{ semester }} subjects, shared by college students on NoteShare.
+  {%- else -%}
+    Browse and search study notes shared by college students, filtered by semester and subject.
+  {%- endif -%}
+{%- endblock %}
+{% block robots %}{{ "index, follow" if indexable else "noindex, follow" }}{% endblock %}
+{% block canonical %}{{ absolute_url(url_for('notes.browse', semester=semester, subject=subject_id, page=page if page > 1 else none)) }}{% endblock %}
+{% block main_class %}site-main--wide{% endblock %}
+
+{% block structured_data %}
+{%- if not has_filters and page == 1 %}
+  <script type="application/ld+json">{{ {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "NoteShare",
+    "url": absolute_url(url_for('notes.browse')),
+    "description": "Study notes shared by college students, organised by subject and semester.",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {"@type": "EntryPoint", "urlTemplate": absolute_url(url_for('notes.browse')) ~ "?q={search_term_string}"},
+      "query-input": "required name=search_term_string"
+    }
+  }|tojson }}</script>
+{%- endif %}
+{% endblock %}
+
+{% block content %}
+<section aria-labelledby="browse-heading">
+  <div class="browse-hero">
+    <div class="browse-hero-text">
+      <h1 id="browse-heading">{{ listing_name }}<sup class="heading-count" aria-label="{{ pagination.total }} notes"> ({{ pagination.total }})</sup></h1>
+      <p class="page-intro">Study notes shared by students, organised by subject and semester.</p>
+    </div>
+    {% if current_user %}
+      <a class="button button--primary" href="{{ url_for('notes.upload') }}">Upload a note</a>
+    {% else %}
+      <a class="button button--primary" href="{{ url_for('auth.register') }}">Create a student account</a>
+    {% endif %}
+    {% if semesters %}
+      <nav class="semester-links" aria-label="Browse by semester">
+        <a href="{{ url_for('notes.browse') }}"{% if not semester and not subject_id %} aria-current="page"{% endif %}>All notes</a>
+        {% for s in semesters %}
+          <a href="{{ url_for('notes.browse', semester=s) }}"{% if semester == s and not subject_id %} aria-current="page"{% endif %}>Semester {{ s }} <span class="link-count">({{ semester_counts.get(s, 0) }})</span></a>
+        {% endfor %}
+      </nav>
+    {% endif %}
+  </div>
+
+  <form class="filters" method="get" action="{{ url_for('notes.browse') }}" role="search" aria-label="Search and filter notes">
+    <div class="filter filter--search">
+      <label for="q">Search</label>
+      <input id="q" type="search" name="q" value="{{ q }}" maxlength="100" placeholder="Title or description">
+    </div>
+    <div class="filter">
+      <label for="semester">Semester</label>
+      <select id="semester" name="semester">
+        <option value="">All semesters</option>
+        {% for s in semesters %}
+          <option value="{{ s }}"{% if s == semester %} selected{% endif %}>Semester {{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter">
+      <label for="subject">Subject</label>
+      <select id="subject" name="subject">
+        <option value="">All subjects</option>
+        {% for sem in semesters %}
+          <optgroup label="Semester {{ sem }}">
+            {% for subject in subjects if subject.semester == sem %}
+              <option value="{{ subject.id }}"{% if subject.id == subject_id %} selected{% endif %}>{{ subject.code }} — {{ subject.name }}</option>
+            {% endfor %}
+          </optgroup>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter">
+      <label for="sort">Sort by</label>
+      <select id="sort" name="sort">
+        {% for value, label in sort_options.items() %}
+          <option value="{{ value }}"{% if value == sort %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="button button--primary">Apply</button>
+      {% if has_filters or 'sort' in filter_args %}
+        <a class="button button--secondary" href="{{ url_for('notes.browse') }}">Clear filters</a>
+      {% endif %}
+    </div>
+  </form>
+
+  {% if pagination.total %}
+    <p class="results-summary" role="status">
+      Showing {{ pagination.first }}–{{ pagination.last }} of {{ pagination.total }} note{{ "s" if pagination.total != 1 }}
+      {%- if q %} matching “{{ q }}”{% endif %}
+    </p>
+
+    {% set back = request.full_path.rstrip("?") %}
+    <ul class="note-grid" role="list">
+      {% for note in notes %}
+        <li>{{ note_card(note, back) }}</li>
+      {% endfor %}
+    </ul>
+
+    {{ pager(pagination, "notes.browse", filter_args) }}
+  {% else %}
+    <div class="empty-state" role="status">
+      {% if semester or subject_id %}
+        <h2>No notes match the selected filters.</h2>
+        <p>Try another semester or subject, or remove some filters.</p>
+        <a class="button button--secondary" href="{{ url_for('notes.browse') }}">Clear filters</a>
+      {% elif q %}
+        <h2>No notes match your search.</h2>
+        <p>Check the spelling or try a shorter search.</p>
+        <a class="button button--secondary" href="{{ url_for('notes.browse') }}">Clear search</a>
+      {% else %}
+        <h2>No notes have been uploaded yet.</h2>
+        {% if current_user %}
+          <p>Be the first to share notes for one of your subjects.</p>
+          <a class="button button--primary" href="{{ url_for('notes.upload') }}">Upload a note</a>
+        {% else %}
+          <p>Log in to share notes for your subjects.</p>
+          <a class="button button--primary" href="{{ url_for('auth.login') }}">Log in</a>
+        {% endif %}
+      {% endif %}
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

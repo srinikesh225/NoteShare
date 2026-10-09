@@ -11,6 +11,8 @@ repository currently contains:
 
 - **Phase 1: the project foundation and database layer** (sections 2–22)
 - **Phase 2: authentication and roles** ([section 23](#23-phase-2-authentication-and-roles))
+- **Phase 3: core note features** — upload, browse/search/filter, details, download, My
+  Notes, delete — plus search-engine and sharing support ([section 24](#24-phase-3-core-note-features))
 
 ## 2. Phase 1 scope
 
@@ -45,6 +47,8 @@ Not implemented yet: see [section 22](#22-current-limitations-and-future-phases)
 NoteShare/
 ├── app.py                # Application factory, CSRF, error pages, dev entry point
 ├── auth.py               # Register/login/logout routes, decorators, current user
+├── notes.py              # Browse, upload, note details, download, My Notes, delete
+├── seo.py                # robots.txt, sitemap.xml, llms.txt, favicon.ico, absolute URLs
 ├── config.py             # Loads .env, defines Config, validates required settings
 ├── models.py             # db = SQLAlchemy(), the five models, role hierarchy
 ├── schema.sql            # Raw MySQL DDL matching models.py
@@ -55,26 +59,38 @@ NoteShare/
 ├── .env.example          # Template for your local .env (no real secrets)
 ├── .gitignore
 ├── templates/
-│   ├── base.html         # Layout: header, navigation, flash messages, footer
+│   ├── base.html         # Layout: head/SEO tags, header, navigation, flash messages, footer
 │   ├── _forms.html       # Form field macro (label, input, inline error)
+│   ├── _notes.html       # Note card, ratings, status label and pagination macros
+│   ├── _layout.html      # Breadcrumb macro
+│   ├── home.html         # Browse/search page (the homepage)
+│   ├── upload.html
+│   ├── note_detail.html
+│   ├── my_notes.html
 │   ├── register.html
 │   ├── login.html
-│   ├── account.html      # Signed-in landing page (your account details)
-│   └── error.html        # 400/403/404/405/500 pages
+│   ├── account.html      # Your account details
+│   ├── error.html        # 400/403/404/405/413/500 pages
+│   ├── sitemap.xml       # Rendered by /sitemap.xml
+│   └── llms.txt          # Rendered by /llms.txt
 ├── static/
 │   ├── css/style.css
-│   ├── js/main.js        # Optional: dismiss buttons on flash messages
-│   └── favicon.svg
+│   ├── js/main.js        # Optional: flash dismiss buttons, file-size warning
+│   ├── favicon.svg, favicon.ico, apple-touch-icon.png
+│   └── og-image.png      # 1200x630 social share image
 ├── tests/
-│   ├── conftest.py       # Test app, test-database guard, fixtures
-│   └── test_auth.py
-└── uploads/              # Future uploaded files; contents are git-ignored
+│   ├── conftest.py       # Test app, test-database guard, fixtures, test files
+│   ├── test_auth.py      # Phase 2
+│   ├── test_notes.py     # Phase 3
+│   └── test_seo.py       # Titles, headings, canonical/robots, sitemap, structured data
+└── uploads/              # Uploaded note files (UUID names); contents are git-ignored
 ```
 
 `uploads/.gitkeep` is an empty placeholder so Git keeps the folder.
 
-Import direction (no circular imports): `app.py → auth.py, config.py, models.py`;
-`auth.py → models.py`; `seed.py → app.py, models.py`.
+Import direction (no circular imports): `app.py → auth.py, notes.py, seo.py, config.py,
+models.py`; `notes.py → auth.py, models.py`; `auth.py, seo.py → models.py`;
+`seed.py → app.py, models.py`.
 
 ## 5. Prerequisites
 
@@ -224,11 +240,14 @@ DATABASE_URL=mysql+pymysql://noteshare_user:<YOUR_APP_DB_PASSWORD>@localhost:330
 SECRET_KEY=<paste a generated key here>
 UPLOAD_FOLDER=uploads
 SESSION_COOKIE_SECURE=false
+SITE_URL=
 TEST_DATABASE_URL=mysql+pymysql://noteshare_user:<YOUR_APP_DB_PASSWORD>@localhost:3306/noteshare_test
 ```
 
 `SESSION_COOKIE_SECURE` must be `true` in production behind HTTPS, and `false` for local
 `http://` development (otherwise the browser drops the session cookie and logins don't stick).
+`SITE_URL` is the site's public address once it has a domain (e.g.
+`https://notes.example.edu`); leave it empty locally (see section 24.8).
 `TEST_DATABASE_URL` is only used by the tests (see [section 23.9](#239-running-the-tests)).
 
 Generate the secret key with:
@@ -335,7 +354,7 @@ python app.py
 ```
 
 or, with auto-reload and the interactive debugger, `flask --app app run --debug`. The server
-starts on <http://127.0.0.1:5000>, which redirects to the login page. Creating the app does
+starts on <http://127.0.0.1:5000>, which shows the browse page. Creating the app does
 not open a database connection; the first request does.
 
 Flask's built-in server is for development only. Never use it, or `--debug`, in production;
@@ -409,12 +428,10 @@ create them on a server that anyone else can reach, and never reuse them anywher
 
 ## 22. Current limitations and future phases
 
-Phase 1 contained no pages or routes; Phase 2 added registration, login, logout and the
-account page (section 23). The following still do **not** exist:
+Phase 1 contained no pages or routes; Phase 2 added accounts (section 23) and Phase 3 the
+note features (section 24). The following still do **not** exist:
 
-- Note upload or download endpoints
-- Search or browsing
-- Ratings UI
+- Submitting ratings and reviews (existing ratings are displayed)
 - Reporting UI
 - Moderation dashboard
 - Administrative dashboard
@@ -433,13 +450,14 @@ uses the existing `users` table as it is.
 
 | Route       | Method    | Access              | Purpose |
 | ----------- | --------- | ------------------- | ------- |
-| `/`         | GET       | anyone              | Redirects to `/account` if signed in, otherwise `/login` (there is no homepage yet) |
+| `/`         | GET       | anyone              | The browse page (Phase 3, section 24) |
 | `/register` | GET, POST | signed-out visitors | Create a student account |
 | `/login`    | GET, POST | signed-out visitors | Sign in |
 | `/logout`   | POST only | anyone              | Sign out |
-| `/account`  | GET       | signed-in users     | Your account details; where users land after signing in |
+| `/account`  | GET       | signed-in users     | Your account details |
 
-Signed-in users who open `/login` or `/register` are sent to `/account`.
+After signing in, users land on the browse page (`/`), or on the page they originally
+asked for. Signed-in users who open `/login` or `/register` are sent to `/`.
 
 ### 23.2 Registration
 
@@ -547,20 +565,20 @@ per request.
 
 | Visitor    | Navigation |
 | ---------- | ---------- |
-| Signed out | Log in, Register |
+| Signed out | Browse, Log in, Register |
 | Student    | Browse, Upload, My Notes, account name, Log out |
 | Moderator  | the student items + Reports |
 | Admin      | the moderator items + Subjects |
 
-Browse, Upload, My Notes, Reports, Subjects and the search box are not built yet. They are
-shown greyed out with a "Soon" label (the search box is disabled) instead of linking to
-pages that don't exist. Each is tied to an endpoint name in `auth.NAV_ITEMS` /
-`auth.SEARCH_ENDPOINT` (`notes.browse`, `notes.upload`, `notes.mine`,
-`moderation.reports`, `admin.subjects`, `notes.search`). When a later phase registers a
-route with that endpoint name, the item turns into a working link automatically.
+Reports and Subjects are not built yet. They are shown greyed out with a "Soon" label
+instead of linking to pages that don't exist. Each navigation item is tied to an endpoint
+name in `auth.NAV_ITEMS` (`notes.browse`, `notes.upload`, `notes.mine`,
+`moderation.reports`, `admin.subjects`); when a later phase registers a route with that
+endpoint name, the item turns into a working link automatically. Browse, Upload and My
+Notes became links this way in Phase 3.
 
 The pages are plain HTML and CSS (`static/css/style.css`) with no framework and no web
-fonts. They have one accent colour, visible keyboard focus, labelled fields with errors
+fonts. They use ink (near-black) plus one lime highlight, visible keyboard focus, labelled fields with errors
 linked by `aria-describedby`, a skip link, and reduced motion when the OS requests it. The
 layout was checked for horizontal scrolling at 320, 375, 414, 768, 1024 and 1440 px.
 `static/js/main.js` only adds dismiss buttons to flash messages; every page works without
@@ -611,5 +629,167 @@ navigation per role, cookie flags, escaping of user input, and form-value preser
 - No login rate limiting or account lockout; add it before a public deployment.
 - Promoting, demoting and banning users is done in MySQL until the admin and moderation
   tools exist.
-- There is no homepage yet: `/` redirects to `/account` or `/login`.
 - No Privacy Policy or Terms pages yet; both are needed before a public launch.
+
+## 24. Phase 3: Core Note Features
+
+Phase 3 adds the note workflow in `notes.py` (a blueprint registered by `app.py`). It uses
+the existing `notes`, `subjects`, `users` and `ratings` tables unchanged; no schema change
+was needed.
+
+### 24.1 Routes
+
+| Route                      | Method    | Access                          | Purpose |
+| -------------------------- | --------- | ------------------------------- | ------- |
+| `/`                        | GET       | anyone                          | Browse, search, filter, sort and page through active notes |
+| `/upload`                  | GET, POST | signed in                       | Upload a note |
+| `/note/<id>`               | GET       | anyone (active notes)           | Note details, rating summary and reviews |
+| `/note/<id>/download`      | GET       | signed in                       | Download the file |
+| `/my-notes`                | GET       | signed in                       | Your own uploads and their status |
+| `/note/<id>/delete`        | POST only | the note's uploader             | Delete your note |
+
+### 24.2 Uploading notes
+
+The form asks for a title (required, up to 200 characters), an optional description (up
+to 5,000 characters; line breaks are kept), a subject chosen from the `subjects` table, and
+a file.
+
+- **Allowed files:** `.pdf`, `.docx`, `.pptx`, `.jpg`, `.png` (`ALLOWED_EXTENSIONS` in
+  `config.py`; upper-case extensions are accepted and stored in lower case).
+- **Content check:** the file's first bytes must match its extension (PDF, PNG and JPEG
+  signatures; `.docx`/`.pptx` must be real Office ZIP packages). A program renamed to
+  `.pdf` is rejected. This catches mislabelled files but does not prove a document is
+  harmless; uploaded files are never executed or displayed inline.
+- **Size limit:** the whole request may be at most 10 MiB (`MAX_CONTENT_LENGTH`). Larger
+  uploads get the upload form back with *"This file is larger than the 10 MiB limit"*
+  (HTTP 413); the browser also warns before sending when JavaScript is on.
+- **Storage:** the file is saved in `UPLOAD_FOLDER` (`uploads/` by default) as
+  `<32 hex characters>.<ext>`, a random UUID. The original filename is used only to read
+  its extension. `Note.file_path` stores just that name, never a full path, so the folder
+  can move between machines.
+- The uploader is always the signed-in user (a submitted `uploader_id` is ignored), and new
+  notes start as `active` with 0 downloads and a 0 average rating.
+- If the database insert fails after the file was saved, the transaction is rolled back,
+  the file is removed, and the form is shown again with your entries kept.
+
+### 24.3 Browsing, search, filters, sorting and pagination
+
+The homepage lists **active notes only**; flagged and removed notes never appear.
+
+| Parameter    | Values | Meaning |
+| ------------ | ------ | ------- |
+| `q`          | text   | Case-insensitive search in titles **and** descriptions (`%` and `_` are matched literally) |
+| `semester`   | e.g. `5` | Notes whose subject is in that semester |
+| `subject`    | subject id | Notes for one subject |
+| `sort`       | `newest` (default), `highest_rated`, `most_downloaded` | Ties are broken by newest upload, then id, so the order is stable |
+| `page`       | 1, 2, … | 12 notes per page |
+
+All parameters combine in one SQL query: filters, then ordering, then `LIMIT/OFFSET`, so
+`/?q=algorithms&semester=5&subject=1&sort=newest&page=2` returns page 2 of the notes that
+match all of them. Pagination links keep every active parameter. Invalid values (e.g.
+`semester=abc`, an unknown subject, `page=-1`, an unknown sort) are ignored instead of causing
+an error; a page past the end redirects to the last page. Each listing shows a matching
+empty state: no notes yet, no search results, or no notes for the selected filters (with a
+link to clear them).
+
+### 24.4 Note details and downloads
+
+The detail page shows the title, description, subject (linked to that subject's listing),
+semester, uploader, upload date, downloads, file format, the rating summary and every review
+(newest first). The summary is calculated from the `ratings` rows themselves, so it cannot
+be out of date; with no ratings it says *"No ratings yet."* Review text is escaped, never
+rendered as HTML. **Submitting ratings is not part of Phase 3**; this page displays ratings
+that already exist.
+
+Downloads require login (signed-out visitors see *"Log in to download"*). The download
+route checks the note's visibility, accepts only stored names this app generates, makes
+sure the resolved path is inside `UPLOAD_FOLDER` and the file exists, then sends it as an
+attachment named after the note's title (e.g. `Graph_Algorithms_Notes.pdf`) with
+`X-Content-Type-Options: nosniff`.
+
+**When the download count goes up:** once, for each request that passes every check and
+starts sending the file. It is updated in MySQL as `download_count = download_count + 1`,
+so simultaneous downloads are all counted. Missing notes, refused requests and missing
+files are not counted. A count means "the server started sending the file", not "the user
+received all of it", and repeat downloads by the same person count again.
+
+### 24.5 Who can see what
+
+| Note status | Listed on `/` | Detail page and download |
+| ----------- | ------------- | ------------------------ |
+| `active`    | yes           | everyone can view; signed-in users can download |
+| `flagged`, `removed` | no   | only the uploader and moderators/admins; everyone else gets **404**, so hidden notes don't reveal that they exist |
+
+The uploader sees the status on the detail page and in My Notes: **Active**, **Flagged /
+Under Review** or **Removed**, shown as text (not by colour alone).
+
+### 24.6 My Notes and deleting
+
+`/my-notes` lists only the signed-in user's own notes (12 per page), with subject, date,
+rating, downloads, status, a View link and a Delete button. With no uploads it shows
+*"You haven't uploaded any notes yet."* and a link to upload.
+
+Deleting asks for confirmation first (a built-in disclosure, so it works without
+JavaScript), is POST-only and CSRF-protected, and is checked on the server: only the note's
+uploader may delete it (others get 403, including moderators; a GET request gets 405). The
+database row is deleted first; the note's ratings and reports go with it through the
+`ON DELETE CASCADE` foreign keys, and nothing belonging to other notes is touched. The file
+is removed only after the database commit succeeds, and a file that can't be removed is
+logged for manual cleanup. Uploaders can currently delete their own flagged notes too.
+
+### 24.7 Search engines, sharing and page quality
+
+- Every page has a unique `<title>`, a meta description, exactly one `<h1>`, Open Graph
+  and Twitter tags with a 1200×630 share image (`static/og-image.png`), and favicons
+  (`favicon.svg`, `/favicon.ico`, `apple-touch-icon.png`).
+- **Canonical links** drop tracking/navigation parameters: note pages point to
+  `/note/<id>`, listings to `/?semester=…&subject=…&page=…`.
+- **Indexing:** the browse page, semester/subject listings and active notes are indexable.
+  Searches, re-sorted lists, login, upload, My Notes, account, hidden notes and error pages
+  are `noindex`.
+- `/robots.txt` keeps crawlers out of private pages and points to `/sitemap.xml`, which
+  lists the homepage, subject listings with active notes, every active note, and
+  registration.
+- `/llms.txt` gives AI tools a plain-text summary of the site and its subjects.
+- **Structured data (JSON-LD):** `WebSite` with a search action on the homepage;
+  `LearningResource` (with `AggregateRating` only when real ratings exist) and
+  `BreadcrumbList` on note pages. There is deliberately **no `LocalBusiness` markup**:
+  NoteShare has no physical address, and inventing one would be false information.
+- Breadcrumbs appear on note, upload, My Notes and account pages; the footer links to every
+  subject; the 404 page offers a search box and semester links.
+- No source maps are shipped, and the only JavaScript is `static/js/main.js` (under 2 KB).
+
+### 24.8 Custom domain
+
+A domain has to be registered and pointed at your web host outside this project. Once
+it is live, set `SITE_URL=https://your-domain` in the server's `.env`. Canonical links,
+`robots.txt`, `sitemap.xml`, `llms.txt` and share tags will then use it. Without
+`SITE_URL`, the address of the current request is used, which is fine locally but should
+not be relied on in production. Serve the site over HTTPS and set
+`SESSION_COOKIE_SECURE=true` at the same time.
+
+### 24.9 Running the tests
+
+The same setup as section 23.9; uploaded test files go to a temporary folder, never
+`uploads/`:
+
+```powershell
+python -m pytest -v
+```
+
+`tests/test_notes.py` covers uploads (valid PDF, UUID names, uploader/subject/status,
+rejected types and disguised files, missing/empty/oversized files, invalid subjects,
+preserved form values, cleanup after a database failure), five sample uploads across
+semesters 5 and 6 (PDF, DOCX, PPTX, PNG, PDF) that are then downloaded, the homepage
+(hidden notes, search in titles and descriptions, every filter combination, all three
+sorts, pagination with preserved parameters, empty states, malformed parameters), details,
+downloads (login, bytes, counter, missing files, hidden notes, unsafe stored paths) and
+My Notes/delete (ownership, cascades, GET refused, CSRF). `tests/test_seo.py` covers the
+items in 24.7.
+
+### 24.10 Phase 3 limitations
+
+- Rating and reporting forms, moderation and subject administration come in a later phase.
+- Card ratings use the stored `Note.avg_rating`; the code that adds ratings must call
+  `Note.update_avg_rating()` (the detail page always calculates from the ratings).
+- Content checks catch disguised files but are not a virus scan.

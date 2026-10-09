@@ -1,0 +1,20 @@
+# NoteShare
+
+> NoteShare is a notes-sharing platform for college students. Students upload their study notes, filed by subject and semester; anyone can browse and search them, and signed-in students can download them.
+
+Each note has a title, an optional description, a subject (course code and name), a semester, the uploader's name, an average star rating from students, and a download count. Files are PDF, Word (.docx), PowerPoint (.pptx), JPG or PNG. Only notes that are active are listed publicly; notes under moderator review are hidden.
+
+## Main pages
+
+- [Browse notes]({{ absolute_url(url_for('notes.browse')) }}): every available note, newest first; supports search (`?q=`), `?semester=`, `?subject=` and `?sort=newest|highest_rated|most_downloaded`
+- [Create a student account]({{ absolute_url(url_for('auth.register')) }}): required to upload and download notes
+- [Log in]({{ absolute_url(url_for('auth.login')) }})
+{% if subjects %}
+## Subjects
+{% for subject in subjects %}
+- [{{ subject.code }} — {{ subject.name }}]({{ absolute_url(url_for('notes.browse', subject=subject.id)) }}): notes for semester {{ subject.semester }}
+{%- endfor %}
+{% endif %}
+## Optional
+
+- [Sitemap]({{ absolute_url(url_for('seo.sitemap_xml')) }}): every public note page

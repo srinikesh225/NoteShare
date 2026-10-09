@@ -4,37 +4,63 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% endblock %} · NoteShare</title>
-  <meta name="description" content="{% block description %}NoteShare is a notes-sharing platform where college students share study notes by subject and semester.{% endblock %}">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="{% filter trim %}{% block description %}NoteShare is a notes-sharing platform where college students share study notes by subject and semester.{% endblock %}{% endfilter %}">
+  <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
+  {#- The canonical block is only read through self.canonical(); defining it
+      inside a branch that never renders keeps it from printing twice. Pages
+      override it, or set it empty to omit the tag (error pages). #}
+  {%- if false %}{% block canonical %}{{ absolute_url(request.path) }}{% endblock %}{% endif %}
+  {%- set canonical = self.canonical()|trim %}
+  {%- if canonical %}
+  <link rel="canonical" href="{{ canonical }}">
+  {%- endif %}
+
+  <meta property="og:site_name" content="NoteShare">
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  <meta property="og:title" content="{{ self.title()|trim }}">
+  <meta property="og:description" content="{{ self.description()|trim }}">
+  {%- if canonical %}
+  <meta property="og:url" content="{{ canonical }}">
+  {%- endif %}
+  <meta property="og:image" content="{{ absolute_url(url_for('static', filename='og-image.png')) }}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="NoteShare: study notes shared by students, organised by subject and semester.">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <meta name="theme-color" content="#121212">
+  <link rel="icon" href="{{ url_for('seo.favicon_ico') }}" sizes="32x32">
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+  {%- block structured_data %}{% endblock %}
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
 
   <header class="site-header">
     <div class="container header-inner{% if current_user %} header-inner--signed-in{% endif %}">
-      <a class="wordmark" href="{{ url_for('index') }}">
+      <a class="wordmark" href="{{ url_for('notes.browse') }}">
         <svg class="wordmark-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
           <path d="M4 2h18l6 6v22H4z" fill="currentColor"/>
-          <path d="M22 2v6h6z" fill="#9fb3e0"/>
-          <path d="M10 23V11h2.2l5.8 8.2V11h2v12h-2.2L12 14.8V23z" fill="#fff"/>
+          <path d="M22 2v6h6z" fill="#d8f34a"/>
+          <path d="M10 23V11h2.2l5.8 8.2V11h2v12h-2.2L12 14.8V23z" fill="#d8f34a"/>
         </svg>
         <span>NoteShare</span>
       </a>
 
-      <form class="search" role="search"{% if search_url %} action="{{ search_url }}" method="get"{% endif %}>
+      {# The browse page has its own search and filter form, so the header
+         search is left out there to avoid two search boxes. #}
+      {% if request.endpoint != 'notes.browse' %}
+      <form class="search" role="search" action="{{ search_url }}" method="get">
         <label for="site-search" class="visually-hidden">Search notes</label>
         <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
         </svg>
-        {% if search_url %}
-          <input id="site-search" type="search" name="q" placeholder="Search notes by title or subject">
-        {% else %}
-          <input id="site-search" type="search" name="q" placeholder="Search is coming soon" disabled>
-        {% endif %}
+        <input id="site-search" type="search" name="q" maxlength="100" placeholder="Search notes by title or description">
       </form>
+      {% endif %}
 
       {% if current_user %}
         <nav class="main-nav" aria-label="Main">
@@ -64,8 +90,11 @@
           </form>
         </div>
       {% else %}
-        <nav class="account-controls" aria-label="Account">
-          <a class="nav-link{% if request.endpoint == 'auth.login' %} is-active{% endif %}" href="{{ url_for('auth.login') }}">Log in</a>
+        <nav class="account-controls" aria-label="Main">
+          <a class="nav-link{% if request.endpoint == 'notes.browse' %} is-active{% endif %}" href="{{ url_for('notes.browse') }}"
+             {%- if request.endpoint == 'notes.browse' %} aria-current="page"{% endif %}>Browse</a>
+          <a class="nav-link{% if request.endpoint == 'auth.login' %} is-active{% endif %}" href="{{ url_for('auth.login') }}"
+             {%- if request.endpoint == 'auth.login' %} aria-current="page"{% endif %}>Log in</a>
           <a class="button button--primary button--small" href="{{ url_for('auth.register') }}">Register</a>
         </nav>
       {% endif %}
@@ -74,6 +103,8 @@
 
   <main id="main" class="site-main {% block main_class %}{% endblock %}" tabindex="-1">
     <div class="container">
+      {% block breadcrumbs %}{% endblock %}
+
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           <div class="flash-stack">
@@ -92,8 +123,34 @@
   </main>
 
   <footer class="site-footer">
-    <div class="container footer-inner">
-      <p><strong>NoteShare</strong> — study notes shared by students, organised by subject and semester.</p>
+    <div class="container footer-grid">
+      <div class="footer-about">
+        <p class="footer-brand">NoteShare</p>
+        <p>Study notes shared by students, organised by subject and semester.</p>
+      </div>
+      {% for sem in footer_semesters %}
+        <nav class="footer-links" aria-label="Semester {{ sem }} subjects">
+          <h2 class="footer-heading">Semester {{ sem }}</h2>
+          <ul>
+            {% for subject in footer_subjects if subject.semester == sem %}
+              <li><a href="{{ url_for('notes.browse', subject=subject.id) }}">{{ subject.code }} {{ subject.name }}</a></li>
+            {% endfor %}
+          </ul>
+        </nav>
+      {% endfor %}
+      <nav class="footer-links" aria-label="NoteShare">
+        <h2 class="footer-heading">NoteShare</h2>
+        <ul>
+          <li><a href="{{ url_for('notes.browse') }}">Browse all notes</a></li>
+          {% if current_user %}
+            <li><a href="{{ url_for('notes.upload') }}">Upload a note</a></li>
+            <li><a href="{{ url_for('notes.mine') }}">My notes</a></li>
+          {% else %}
+            <li><a href="{{ url_for('auth.register') }}">Create a student account</a></li>
+            <li><a href="{{ url_for('auth.login') }}">Log in</a></li>
+          {% endif %}
+        </ul>
+      </nav>
     </div>
   </footer>
 </body>
