@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title|default("Page not found") }}{% endblock %}
+{% block description %}{{ message|default("The page you're looking for doesn't exist or may have been moved.") }}{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+{% block canonical %}{% endblock %}
+
+{% block content %}
+<section class="page error-page" aria-labelledby="error-heading">
+  <p class="error-code">Error 404</p>
+  <h1 id="error-heading">{{ title|default("Page not found") }}</h1>
+  <p class="error-message">{{ message|default("The page you're looking for doesn't exist or may have been moved.") }}</p>
+
+  <p><a class="button button--primary" href="{{ url_for('notes.browse') }}">Go to the home page</a></p>
+
+  <form class="error-search" role="search" action="{{ url_for('notes.browse') }}" method="get">
+    <label for="error-search-input">Or search for notes</label>
+    <div class="error-search-row">
+      <input id="error-search-input" type="search" name="q" maxlength="100" placeholder="Title or description">
+      <button type="submit" class="button button--secondary">Search</button>
+    </div>
+  </form>
+  {% if footer_semesters %}
+    <p class="error-links">You can also browse
+      {% for sem in footer_semesters -%}
+        <a href="{{ url_for('notes.browse', semester=sem) }}">semester {{ sem }}</a>{{ " or " if not loop.last else "." }}
+      {%- endfor %}
+    </p>
+  {% endif %}
+</section>
+{% endblock %}

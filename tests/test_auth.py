@@ -6,7 +6,7 @@ import pytest
 from werkzeug.security import check_password_hash
 
 import auth
-from conftest import get_csrf_token, log_in
+from tests.conftest import get_csrf_token, log_in
 from models import User, db
 
 VALID_REGISTRATION = {

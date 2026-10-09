@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import get_csrf_token, log_in, upload_note
+from tests.conftest import get_csrf_token, log_in, upload_note
 from models import Note, Rating, db
 
 STATIC = Path(__file__).resolve().parent.parent / "static"

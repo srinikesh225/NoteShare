@@ -579,6 +579,32 @@ a.subject-code:hover { background: var(--color-accent); color: var(--color-highl
 .semester-links a[aria-current] { background: var(--color-accent); color: #fff; }
 .link-count { font-weight: 400; opacity: 0.8; }
 
+/* Statistics bar (homepage) */
+.stats-bar { margin-bottom: var(--space-5); }
+.stats-bar dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-large);
+}
+.stat { padding: var(--space-4) var(--space-5); min-width: 0; }
+.stat + .stat { border-left: 1px solid var(--color-border); }
+.stat dt { color: var(--color-muted); font-size: 0.85rem; font-weight: 600; }
+.stat dd {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.5rem);
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.error-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2); }
+
 /* 404 search */
 .error-message { color: var(--color-muted); font-size: 1.05rem; }
 .error-search { max-width: 460px; margin: var(--space-6) auto var(--space-4); text-align: left; }
@@ -1019,6 +1045,8 @@ a.page-link:hover { border-color: var(--color-input-border); color: var(--color-
   .account-link { padding: var(--space-1); }
 
   .browse-hero { grid-template-columns: 1fr; padding: var(--space-5) var(--space-4); }
+  .stat { padding: var(--space-3); }
+  .stat dt { font-size: 0.75rem; }
   .browse-hero > .button { justify-self: start; }
 
   .site-main { padding-top: var(--space-5); }
@@ -1033,9 +1061,19 @@ a.page-link:hover { border-color: var(--color-input-border); color: var(--color-
   .page-number:has(.is-current) { display: block; }
 }
 
-/* Small phones: one filter per row so dropdown text is never cut off. */
+/* Small phones: one filter per row so dropdown text is never cut off, and
+   the signed-in account controls get their own row so they can't overlap
+   the logo. */
 @media (max-width: 420px) {
   .filters { grid-template-columns: minmax(0, 1fr); }
+  .header-inner--signed-in {
+    grid-template-areas:
+      "logo    logo"
+      "account account"
+      "search  search"
+      "nav     nav";
+  }
+  .header-inner--signed-in .account-controls { justify-self: start; }
 }
 
 @media (prefers-reduced-motion: reduce) {

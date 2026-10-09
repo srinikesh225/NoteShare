@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{# Errors other than 403 and 404 (which have their own templates). #}
 
 {% block title %}{{ title }}{% endblock %}
 {% block description %}{{ message }}{% endblock %}
@@ -10,24 +11,6 @@
   <p class="error-code">Error {{ code }}</p>
   <h1 id="error-heading">{{ title }}</h1>
   <p class="error-message">{{ message }}</p>
-
-  {% if code == 404 %}
-    <form class="error-search" role="search" action="{{ url_for('notes.browse') }}" method="get">
-      <label for="error-search-input">Search for notes instead</label>
-      <div class="error-search-row">
-        <input id="error-search-input" type="search" name="q" maxlength="100" placeholder="Title or description">
-        <button type="submit" class="button button--primary">Search</button>
-      </div>
-    </form>
-    {% if footer_semesters %}
-      <p class="error-links">Or browse
-        {% for sem in footer_semesters -%}
-          <a href="{{ url_for('notes.browse', semester=sem) }}">semester {{ sem }}</a>{{ " or " if not loop.last else "." }}
-        {%- endfor %}
-      </p>
-    {% endif %}
-  {% endif %}
-
   <p><a class="button button--secondary" href="{{ url_for('notes.browse') }}">Browse all notes</a></p>
 </section>
 {% endblock %}

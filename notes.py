@@ -99,6 +99,22 @@ def _all_subjects():
     return Subject.query.order_by(Subject.semester, Subject.code).all()
 
 
+def site_statistics():
+    """Totals for the homepage statistics bar, calculated by MySQL.
+
+    - notes: notes with status 'active'
+    - downloads: sum of download_count over active notes only, so hidden or
+      removed notes are not counted
+    - subjects: every subject in the database
+    """
+    notes, downloads = db.session.execute(
+        db.select(db.func.count(Note.id), db.func.coalesce(db.func.sum(Note.download_count), 0))
+        .where(Note.status == "active")
+    ).one()
+    subjects = db.session.execute(db.select(db.func.count(Subject.id))).scalar()
+    return {"notes": int(notes), "downloads": int(downloads), "subjects": int(subjects)}
+
+
 def can_view(note, user):
     """Active notes: everyone. Other statuses: the uploader and moderators/admins."""
     if note.status == "active":
@@ -232,6 +248,8 @@ def browse():
     if pagination.pages and page > pagination.pages:
         return redirect(url_for("notes.browse", page=pagination.pages, **filter_args))
 
+    stats = site_statistics()
+
     # Active-note counts per semester for the semester shortcut links.
     semester_counts = dict(db.session.execute(
         db.select(Subject.semester, db.func.count(Note.id))
@@ -247,6 +265,7 @@ def browse():
         subjects=subjects,
         semesters=semesters,
         semester_counts=semester_counts,
+        stats=stats,
         sort_options=SORT_OPTIONS,
         q=q,
         semester=semester,
@@ -626,8 +645,9 @@ def download(note_id):
     if path is None or not os.path.isfile(path):
         current_app.logger.error("Download failed: file for note %s is missing or has an invalid name",
                                  note.id)
-        abort(404, description="The file for this note is unavailable right now. "
-                               "Please try again later.")
+        return render_template("404.html", code=404, title="File unavailable",
+                               message="The file for this note is unavailable right now. "
+                                       "Please try again later."), 404
 
     # Count the download only once every check has passed and the file is
     # about to be sent. The UPDATE runs in MySQL (download_count + 1), so

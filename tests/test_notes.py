@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from conftest import (get_csrf_token, log_in, make_docx, make_pdf, make_png, make_pptx,
+from tests.conftest import (get_csrf_token, log_in, make_docx, make_pdf, make_png, make_pptx,
                       upload_note)
 from models import Note, Rating, Report, User, db
 
@@ -441,7 +441,7 @@ def test_case_j_no_matching_results(client, catalog):
 
 
 def test_30_empty_states(client, subjects):
-    assert "No notes have been uploaded yet." in text_of(browse(client))
+    assert "No notes yet. Be the first to upload!" in text_of(browse(client))
     assert "No notes match your search." in text_of(browse(client, q="anything"))
     assert "No notes match the selected filters." in text_of(browse(client, semester=5))
 

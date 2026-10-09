@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Access denied{% endblock %}
+{% block description %}You don't have permission to access this page.{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+{% block canonical %}{% endblock %}
+
+{% block content %}
+<section class="page error-page" aria-labelledby="error-heading">
+  <p class="error-code">Error 403</p>
+  <h1 id="error-heading">Access denied</h1>
+  <p class="error-message">You don't have permission to access this page.</p>
+  {% if current_user %}
+    <p class="muted">You are signed in as {{ current_user.name }} ({{ current_user.role }}). If you need access, ask an administrator.</p>
+  {% endif %}
+
+  <p class="error-actions">
+    <a class="button button--primary" href="{{ url_for('notes.browse') }}">Browse notes</a>
+    {% if current_user %}
+      <a class="button button--secondary" href="{{ url_for('notes.mine') }}">My notes</a>
+    {% endif %}
+  </p>
+</section>
+{% endblock %}

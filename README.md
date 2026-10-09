@@ -2,18 +2,80 @@
 
 ## 1. Project overview
 
-NoteShare is a peer-to-peer notes marketplace for college students: students upload their
-academic notes, find notes for their subjects, rate them, and report inappropriate content
-to moderators.
+NoteShare is a website where college students share their study notes. Students upload
+notes for their subjects, find notes by searching or filtering by semester and subject,
+download them, rate them, and report notes that break the rules. Moderators review reports,
+and administrators manage the list of subjects.
 
-The application is built with Flask and MySQL and is being developed in phases. This
-repository currently contains:
+It is built with Python (Flask), MySQL, Jinja2 templates, plain CSS and a little JavaScript.
+
+### Main features
+
+- **Accounts:** student registration and login with hashed passwords; logout; banned
+  accounts are blocked.
+- **Roles:** student, moderator and administrator. An admin can do everything a moderator
+  can, and a moderator everything a student can.
+- **Uploading:** PDF, Word, PowerPoint, JPG and PNG up to 10 MiB. The file type and content
+  are checked, and files are stored with random names.
+- **Browsing:** search titles and descriptions, filter by semester and subject, sort by
+  newest, highest rated or most downloaded, 12 notes per page.
+- **Home page statistics:** total notes, total downloads and total subjects, read live from
+  the database.
+- **Note pages and downloads:** details, average rating, reviews, and downloads for
+  signed-in users (with a download counter).
+- **Ratings and comments:** 1–5 stars with an optional review. Rating again updates your
+  rating, and you can't rate your own note.
+- **Reports:** five fixed reasons plus optional details, one report per student per note,
+  no reporting your own note. **Three open reports flag a note automatically** and hide it
+  from students.
+- **Moderation dashboard:**
+  - open reports grouped by note, flagged notes first
+  - dismiss reports, remove a note, warn the uploader (**three warnings suspend the account
+    automatically**) or ban the uploader
+  - confirmation before removing or banning
+- **Subject administration:** admins add and edit subjects, and can delete a subject only
+  when no notes use it.
+- **My Notes:** your uploads with their status, and deleting your own notes.
+- **Interface:**
+  - responsive layout for phones, tablets and desktops
+  - helpful empty states
+  - custom 403 and 404 pages
+  - accessible forms
+- **Search engines and sharing:** page titles and descriptions, sitemap, robots.txt,
+  structured data and a share image.
+- **Automated tests:** 270 pytest tests against a separate MySQL test database.
+
+### Quick start (after the one-time setup in sections 6–13)
+
+```powershell
+docker start noteshare-mysql            # or start your MySQL service
+.\.venv\Scripts\Activate.ps1
+python seed.py                          # creates/updates tables and test accounts (safe to rerun)
+python app.py                           # http://127.0.0.1:5000
+python -m pytest -v                     # run the tests
+```
+
+Development login accounts are listed in [section 19](#19-development-login-credentials).
+
+### Documentation
+
+- [docs/architecture.md](docs/architecture.md): how the project is organised (presentation,
+  application and data layers) and how a request flows through it.
+- [docs/test_cases.md](docs/test_cases.md): the main test cases with results from the latest
+  run.
+- [docs/ui_design.md](docs/ui_design.md): how the interface follows the three golden rules
+  of UI design.
+
+### Development phases
+
+The application was built in phases; the sections below document each one:
 
 - **Phase 1: the project foundation and database layer** (sections 2–22)
 - **Phase 2: authentication and roles** ([section 23](#23-phase-2-authentication-and-roles))
 - **Phase 3: core note features** — upload, browse/search/filter, details, download, My
   Notes, delete — plus search-engine and sharing support ([section 24](#24-phase-3-core-note-features))
 - **Phase 4: ratings, reports, moderation and subjects** ([section 25](#25-phase-4-ratings-reports-moderation-and-subjects))
+- **Phase 5: UI polish, automated testing and documentation** ([section 26](#26-phase-5-ui-polish-testing-and-documentation))
 
 ## 2. Phase 1 scope
 
@@ -77,7 +139,9 @@ NoteShare/
 │   ├── register.html
 │   ├── login.html
 │   ├── account.html      # Your account details
-│   ├── error.html        # 400/403/404/405/413/500 pages
+│   ├── 404.html          # "Page not found"
+│   ├── 403.html          # "Access denied"
+│   ├── error.html        # other errors (400, 405, 413, 500)
 │   ├── sitemap.xml       # Rendered by /sitemap.xml
 │   └── llms.txt          # Rendered by /llms.txt
 ├── static/
@@ -85,8 +149,14 @@ NoteShare/
 │   ├── js/main.js        # Optional: flash dismiss buttons, file-size warning
 │   ├── favicon.svg, favicon.ico, apple-touch-icon.png
 │   └── og-image.png      # 1200x630 social share image
+├── docs/
+│   ├── architecture.md   # Layers and request flow
+│   ├── test_cases.md     # Test case table with latest results
+│   └── ui_design.md      # The three UI golden rules in NoteShare
 ├── tests/
+│   ├── __init__.py
 │   ├── conftest.py       # Test app, test-database guard, fixtures, test files
+│   ├── test_app.py       # Main scenarios (Phase 5): 8 required tests, statistics, error pages, empty states
 │   ├── test_auth.py      # Phase 2
 │   ├── test_notes.py     # Phase 3
 │   ├── test_seo.py       # Titles, headings, canonical/robots, sitemap, structured data
@@ -991,3 +1061,67 @@ against the MySQL test database:
   With the row locks removed as an experiment, both tests failed every time (extra
   reports accepted; database deadlocks on ratings), which confirms the locks are what make
   them pass.
+
+## 26. Phase 5: UI polish, testing and documentation
+
+### 26.1 What changed
+
+- **Home page statistics bar:**
+  - shows *Total notes* (active notes), *Total downloads* (summed over active notes only,
+    so hidden or removed notes don't count) and *Total subjects*
+  - calculated by MySQL on every page load, in two queries, so it updates straight away
+    after uploads, downloads, removals and subject changes
+  - shows 0 when there is no data
+  - covers the whole site, regardless of search filters
+- **Custom error pages:**
+  - `templates/404.html` "Page not found" (*"The page you're looking for doesn't exist or
+    may have been moved."*), with a home-page button, a search box and semester links
+  - `templates/403.html` "Access denied" (*"You don't have permission to access this
+    page."*), with buttons to pages the user can open
+  - both use the normal layout and work signed in or out
+  - signed-out visitors on protected pages are still sent to log in instead
+  - other errors (400, 405, 413, 500) keep the general `error.html`, so a server error is
+    never disguised as a 404 or 403, and no technical details are shown
+- **Empty states:** clearer messages, each with a button shown only to users who may use it:
+  - home: "No notes yet. Be the first to upload!"
+  - search: "No notes match your search. Try changing your search or filters."
+  - My Notes: "You haven't uploaded any notes yet. Upload your first note to get started."
+  - note reviews: "No reviews yet. Be the first to rate this note."
+  - moderation: "No open reports. Everything is clear."
+  - subjects: "No subjects found." plus an *Add subject* button
+- **Responsive fix:** on phones narrower than 420 px, the signed-in account controls move to
+  their own row; at 320 px the logo and role badge used to overlap. All pages were measured
+  at 320×640, 375×812, 768×1024 and 1366×768 with no sideways scrolling.
+- **Tests:**
+  - `tests/test_app.py` holds the eight required scenarios plus statistics, error-page and
+    empty-state tests
+  - `tests/__init__.py` makes `tests` a package; the test files import helpers from
+    `tests.conftest`
+- **Documentation:** the `docs/` folder (see section 1).
+
+### 26.2 Running the tests
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest -v                       # all 270 tests (about 2.5 minutes)
+python -m pytest tests/test_app.py -v     # the main scenarios only
+```
+
+The tests need MySQL and `TEST_DATABASE_URL` in `.env` (section 23.9). They only touch the
+`noteshare_test` database and refuse to run against any database whose name doesn't end in
+`_test`. Results of the latest run are in [docs/test_cases.md](docs/test_cases.md).
+
+### 26.3 Environment variables
+
+All the variables the app reads, set in `.env` (copy it from `.env.example`; section 13):
+
+| Variable | Required | Purpose |
+| -------- | -------- | ------- |
+| `DATABASE_URL` | yes | MySQL address of the main database, `mysql+pymysql://user:password@host:3306/noteshare` |
+| `SECRET_KEY` | yes | Long random value used to sign session cookies |
+| `UPLOAD_FOLDER` | no (default `uploads`) | Where uploaded note files are stored |
+| `SESSION_COOKIE_SECURE` | no (default `false`) | Set to `true` when the site runs on HTTPS |
+| `SITE_URL` | no | The public web address once the site has a domain |
+| `TEST_DATABASE_URL` | for tests | Address of the separate `noteshare_test` database |
+
+Never commit `.env`, and never put real passwords or keys in the README.

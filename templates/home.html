@@ -61,6 +61,25 @@
     {% endif %}
   </div>
 
+  {# Site-wide totals from the database (not affected by the filters below). #}
+  <section class="stats-bar" aria-labelledby="stats-heading">
+    <h2 id="stats-heading" class="visually-hidden">NoteShare in numbers</h2>
+    <dl>
+      <div class="stat">
+        <dt>Total notes</dt>
+        <dd>{{ "{:,}".format(stats.notes) }}</dd>
+      </div>
+      <div class="stat">
+        <dt>Total downloads</dt>
+        <dd>{{ "{:,}".format(stats.downloads) }}</dd>
+      </div>
+      <div class="stat">
+        <dt>Total subjects</dt>
+        <dd>{{ "{:,}".format(stats.subjects) }}</dd>
+      </div>
+    </dl>
+  </section>
+
   <form class="filters" method="get" action="{{ url_for('notes.browse') }}" role="search" aria-label="Search and filter notes">
     <div class="filter filter--search">
       <label for="q">Search</label>
@@ -120,22 +139,22 @@
     {{ pager(pagination, "notes.browse", filter_args) }}
   {% else %}
     <div class="empty-state" role="status">
-      {% if semester or subject_id %}
-        <h2>No notes match the selected filters.</h2>
-        <p>Try another semester or subject, or remove some filters.</p>
-        <a class="button button--secondary" href="{{ url_for('notes.browse') }}">Clear filters</a>
-      {% elif q %}
+      {% if q %}
         <h2>No notes match your search.</h2>
-        <p>Check the spelling or try a shorter search.</p>
-        <a class="button button--secondary" href="{{ url_for('notes.browse') }}">Clear search</a>
+        <p>Try changing your search or filters.</p>
+        <a class="button button--secondary" href="{{ url_for('notes.browse') }}">{{ "Clear search and filters" if semester or subject_id else "Clear search" }}</a>
+      {% elif semester or subject_id %}
+        <h2>No notes match the selected filters.</h2>
+        <p>Try another semester or subject, or clear the filters.</p>
+        <a class="button button--secondary" href="{{ url_for('notes.browse') }}">Clear filters</a>
       {% else %}
-        <h2>No notes have been uploaded yet.</h2>
+        <h2>No notes yet. Be the first to upload!</h2>
         {% if current_user %}
-          <p>Be the first to share notes for one of your subjects.</p>
+          <p>Share notes for one of your subjects so classmates can find them.</p>
           <a class="button button--primary" href="{{ url_for('notes.upload') }}">Upload a note</a>
         {% else %}
-          <p>Log in to share notes for your subjects.</p>
-          <a class="button button--primary" href="{{ url_for('auth.login') }}">Log in</a>
+          <p>Create a free student account to upload and download notes.</p>
+          <a class="button button--primary" href="{{ url_for('auth.register') }}">Create a student account</a>
         {% endif %}
       {% endif %}
     </div>

@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from conftest import get_csrf_token, log_in, upload_note
+from tests.conftest import get_csrf_token, log_in, upload_note
 from migrate import apply_migrations
 from models import Note, Rating, Report, Subject, User, db
 

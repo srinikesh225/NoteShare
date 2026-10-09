@@ -27,18 +27,22 @@ csrf = CSRFProtect()
 
 ERROR_PAGES = {
     400: ("Bad request", "The request could not be understood. Go back, reload the page and try again."),
-    403: ("Access denied", "Your account does not have permission to view this page."),
-    404: ("Page not found", "The page you asked for does not exist or has moved."),
+    403: ("Access denied", "You don't have permission to access this page."),
+    404: ("Page not found", "The page you're looking for doesn't exist or may have been moved."),
     405: ("Method not allowed", "This page cannot be opened that way."),
     413: ("File too large", "The upload is larger than the 10 MiB limit."),
     500: ("Something went wrong", "An unexpected error occurred. Please try again in a moment."),
 }
 
 
-def _error_page(code, message=None):
-    title, default_message = ERROR_PAGES[code]
-    return render_template("error.html", code=code, title=title,
-                           message=message or default_message), code
+# 403 and 404 have their own templates; every other error uses error.html.
+ERROR_TEMPLATES = {403: "403.html", 404: "404.html"}
+
+
+def _error_page(code, message=None, title=None):
+    default_title, default_message = ERROR_PAGES[code]
+    return render_template(ERROR_TEMPLATES.get(code, "error.html"), code=code,
+                           title=title or default_title, message=message or default_message), code
 
 
 def create_app(config_class=Config) -> Flask:
