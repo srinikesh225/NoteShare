@@ -20,6 +20,7 @@ from werkzeug.security import generate_password_hash
 
 from app import create_app
 from config import ConfigError
+from migrate import apply_migrations
 from models import Subject, User, db
 
 SEED_USERS = [
@@ -141,6 +142,8 @@ def main() -> int:
             print(f"Database connection: successful (MySQL server {version})")
 
             db.create_all()  # creates only tables that do not exist yet
+            for step in apply_migrations(db.engine):  # adds columns from later phases
+                print(f"Schema upgrade applied: {step}")
             print("Tables: created/verified (users, subjects, notes, ratings, reports)")
 
             new_users = seed_users()

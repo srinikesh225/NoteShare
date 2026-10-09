@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS reports (
     note_id      INT      NOT NULL,
     reporter_id  INT      NOT NULL,
     reason       TEXT     NOT NULL,
+    details      TEXT     NULL,       -- reporter's optional explanation (Phase 4)
     status       ENUM('open', 'resolved') NOT NULL DEFAULT 'open',
     action_taken TEXT     NULL,
     date         DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP()),

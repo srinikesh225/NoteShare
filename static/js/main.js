@@ -24,3 +24,12 @@ document.querySelectorAll("input[type=file][data-max-bytes]").forEach((input) =>
     if (tooLarge) input.reportValidity();
   });
 });
+
+// Stop accidental double submissions of moderation, rating and report forms
+// (the server also guards against repeated warnings).
+document.querySelectorAll("form[data-submit-once]").forEach((form) => {
+  form.addEventListener("submit", () => {
+    // Disable after the browser has collected the form data.
+    setTimeout(() => form.querySelectorAll("button[type=submit]").forEach((b) => { b.disabled = true; }), 0);
+  });
+});

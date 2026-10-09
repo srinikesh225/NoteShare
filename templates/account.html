@@ -16,6 +16,7 @@
     <div><dt>Email</dt><dd>{{ user.email }}</dd></div>
     <div><dt>Role</dt><dd>{{ user.role|capitalize }}</dd></div>
     <div><dt>Branch</dt><dd>{{ user.branch or "Not set" }}</dd></div>
+    {% if user.warnings %}<div><dt>Warnings</dt><dd>{{ user.warnings }} of {{ config.BAN_AT_WARNINGS }} (an account is suspended at {{ config.BAN_AT_WARNINGS }})</dd></div>{% endif %}
     <div><dt>Year</dt><dd>{{ "Year %d"|format(user.year) if user.year else "Not set" }}</dd></div>
     <div><dt>Member since</dt><dd><time datetime="{{ user.created_at.isoformat() }}">{{ user.created_at.strftime("%d %B %Y") }}</time></dd></div>
   </dl>

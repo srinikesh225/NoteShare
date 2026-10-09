@@ -820,11 +820,22 @@ def test_50_deleting_missing_note_returns_404(client, student):
     assert delete_note(client, 999999).status_code == 404
 
 
-def test_owner_can_delete_own_flagged_note(app, client, student, subjects):
+def test_owner_cannot_delete_note_under_review(app, client, student, subjects):
+    """Phase 4: a flagged note (and its reports) is kept until a moderator decides."""
     upload_ok(client, "Flagged own", subjects["CS501"])
     note = note_by_title(app, "Flagged own")
     set_note(app, "Flagged own", status="flagged")
+    response = delete_note(client, note.id)
+    assert response.status_code == 302 and response.headers["Location"] == "/my-notes"
+    assert "can't be deleted until the review is finished" in text_of(client.get("/my-notes"))
+    with app.app_context():
+        assert db.session.get(Note, note.id) is not None
+    assert stored_files(app) == [note.file_path]
+
+    set_note(app, "Flagged own", status="removed")   # removed notes can still be deleted
     assert delete_note(client, note.id).status_code == 302
+    with app.app_context():
+        assert db.session.get(Note, note.id) is None
 
 
 # ---------------------------------------------------------------------------

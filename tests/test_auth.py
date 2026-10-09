@@ -417,12 +417,12 @@ def test_navigation_for_anonymous_visitor(client):
     assert 'href="/upload"' not in body and 'href="/my-notes"' not in body
 
 
-# Browse, Upload and My Notes are real pages since Phase 3; Reports and
-# Subjects stay as disabled "Soon" placeholders until their phases.
+# Every navigation item is a real page since Phase 4 (Reports = moderation,
+# Subjects = subject administration).
 @pytest.mark.parametrize("role, links, soon, hidden", [
     ("student", ["Browse", "Upload", "My Notes"], [], ["Reports", "Subjects"]),
-    ("moderator", ["Browse", "Upload", "My Notes"], ["Reports"], ["Subjects"]),
-    ("admin", ["Browse", "Upload", "My Notes"], ["Reports", "Subjects"], []),
+    ("moderator", ["Browse", "Upload", "My Notes", "Reports"], [], ["Subjects"]),
+    ("admin", ["Browse", "Upload", "My Notes", "Reports", "Subjects"], [], []),
 ])
 def test_navigation_by_role(client, make_user, role, links, soon, hidden):
     make_user(email=f"{role}@college.example", role=role)

@@ -8,7 +8,8 @@ Visibility rules
 - Flagged and removed notes are visible (and downloadable) only to their
   uploader and to moderators/admins. Everyone else gets a 404, so hidden
   notes do not reveal that they exist.
-- Only a note's uploader can delete it.
+- Only a note's uploader can delete it, and not while it is flagged.
+- Signed-in users may rate and report active notes they did not upload.
 
 File storage
 ------------
@@ -21,17 +22,18 @@ import os
 import re
 import uuid
 import zipfile
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from flask import (Blueprint, abort, current_app, flash, g, redirect, render_template,
                    request, send_from_directory, url_for)
 from sqlalchemy import or_, update
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import contains_eager, joinedload
 from werkzeug.utils import secure_filename
 
 from auth import get_current_user, login_required, safe_next_url
-from models import Note, Rating, Subject, db
+from models import Note, Rating, Report, Subject, db
 
 bp = Blueprint("notes", __name__)
 
@@ -51,6 +53,17 @@ STATUS_LABELS = {
     "active": "Active",
     "flagged": "Flagged / Under Review",
     "removed": "Removed",
+}
+
+COMMENT_MAX_LENGTH = 1000
+REPORT_DETAILS_MAX_LENGTH = 1000
+# Form value -> text stored in Report.reason. Only these are accepted.
+REPORT_REASONS = {
+    "wrong_subject": "Wrong subject",
+    "copied": "Copied content",
+    "unreadable": "Unreadable",
+    "inappropriate": "Inappropriate",
+    "other": "Other",
 }
 
 FILE_TYPE_LABELS = {"pdf": "PDF", "docx": "Word", "pptx": "PowerPoint", "jpg": "JPG", "png": "PNG"}
@@ -366,9 +379,10 @@ def upload():
 # Note details: GET /note/<id>
 # --------------------------------------------------------------------------
 
-@bp.route("/note/<int:note_id>")
-def detail(note_id):
-    note = _get_viewable_note_or_404(note_id, joinedload(Note.subject), joinedload(Note.uploader))
+def render_detail(note, rating_form=None, rating_errors=None, report_form=None,
+                  report_errors=None, status=200):
+    """Render the note page; the rating/report routes reuse it to show errors."""
+    user = get_current_user()
 
     # Ratings are read from the Rating rows themselves, so the summary on this
     # page can never be stale even if avg_rating has not been recalculated.
@@ -381,12 +395,24 @@ def detail(note_id):
     rating_count = len(ratings)
     rating_average = round(sum(r.stars for r in ratings) / rating_count, 1) if ratings else None
 
+    is_owner = user is not None and user.id == note.uploader_id
+    my_rating = next((r for r in ratings if user is not None and r.student_id == user.id), None)
+    my_report = None
+    if user is not None and not is_owner:
+        my_report = Report.query.filter_by(note_id=note.id, reporter_id=user.id).first()
+    open_report_count = None
+    if user is not None and user.has_role("moderator"):
+        open_report_count = Report.query.filter_by(note_id=note.id, status="open").count()
+
+    if rating_form is None:
+        rating_form = {"stars": str(my_rating.stars) if my_rating else "",
+                       "comment": (my_rating.comment or "") if my_rating else ""}
+
     # "Back to results" returns to the listing the user came from, if safe.
     back_url = safe_next_url(request.args.get("back"))
     if back_url and urlsplit(back_url).path not in {url_for("notes.browse"), url_for("notes.mine")}:
         back_url = None
 
-    user = get_current_user()
     return render_template(
         "note_detail.html",
         note=note,
@@ -394,11 +420,197 @@ def detail(note_id):
         rating_count=rating_count,
         rating_average=rating_average,
         back_url=back_url,
-        is_owner=user is not None and user.id == note.uploader_id,
+        is_owner=is_owner,
+        my_rating=my_rating,
+        my_report=my_report,
+        open_report_count=open_report_count,
+        can_rate=user is not None and not is_owner and note.status == "active",
+        can_report=user is not None and not is_owner and note.status == "active" and my_report is None,
+        rating_form=rating_form,
+        rating_errors=rating_errors or {},
+        report_form=report_form or {"reason": "", "details": ""},
+        report_errors=report_errors or {},
+        report_reasons=REPORT_REASONS,
+        comment_max=COMMENT_MAX_LENGTH,
+        details_max=REPORT_DETAILS_MAX_LENGTH,
         status_label=STATUS_LABELS[note.status],
         file_type=FILE_TYPE_LABELS.get(file_extension(note), file_extension(note).upper()),
         file_mime=FILE_MIME_TYPES.get(file_extension(note), "application/octet-stream"),
-    )
+    ), status
+
+
+@bp.route("/note/<int:note_id>")
+def detail(note_id):
+    note = _get_viewable_note_or_404(note_id, joinedload(Note.subject), joinedload(Note.uploader))
+    return render_detail(note)
+
+
+# --------------------------------------------------------------------------
+# Ratings: POST /note/<id>/rate
+# --------------------------------------------------------------------------
+
+def lock_note(note_id):
+    """Load a note with SELECT ... FOR UPDATE (refreshing any cached copy).
+
+    Rating, reporting and moderation all lock the note row first, so changes
+    to the same note happen one at a time and see each other's results.
+    """
+    return db.session.execute(
+        db.select(Note).where(Note.id == note_id).with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+
+
+def _is_duplicate(exc, constraint):
+    orig = getattr(exc, "orig", None)
+    return bool(orig and orig.args and orig.args[0] == 1062 and constraint in str(orig))
+
+
+def _back_to_note(note_id, anchor=""):
+    return redirect(url_for("notes.detail", note_id=note_id) + anchor)
+
+
+def _clean_text(value):
+    return (value or "").replace("\r\n", "\n").strip()
+
+
+@bp.route("/note/<int:note_id>/rate", methods=["POST"])
+@login_required
+def rate(note_id):
+    user = g.current_user
+    form = {"stars": (request.form.get("stars") or "").strip(),
+            "comment": _clean_text(request.form.get("comment"))}
+
+    note = lock_note(note_id)
+    if note is None or not can_view(note, user):
+        abort(404)
+    if note.uploader_id == user.id:
+        db.session.rollback()
+        flash("You cannot rate your own note.", "error")
+        return _back_to_note(note_id)
+    if note.status != "active":
+        db.session.rollback()
+        flash("Only notes that are currently available can be rated.", "error")
+        return _back_to_note(note_id)
+
+    errors = {}
+    if not (form["stars"] in {"1", "2", "3", "4", "5"}):
+        errors["stars"] = "Choose a rating from 1 to 5 stars."
+    if len(form["comment"]) > COMMENT_MAX_LENGTH:
+        errors["comment"] = f"Your review must be {COMMENT_MAX_LENGTH:,} characters or fewer."
+    if errors:
+        db.session.rollback()  # release the row lock before rendering
+        flash("Please correct the highlighted fields.", "error")
+        return render_detail(db.session.get(Note, note_id), rating_form=form, rating_errors=errors,
+                             status=422)
+
+    stars, comment = int(form["stars"]), form["comment"] or None
+    # The rating author is always the signed-in user (stored in student_id);
+    # the note comes from the URL. Neither is taken from the form.
+    for attempt in (1, 2):
+        rating = (Rating.query.filter_by(note_id=note.id, student_id=user.id)
+                  .with_for_update().first())
+        created = rating is None
+        if created:
+            db.session.add(Rating(note_id=note.id, student_id=user.id, stars=stars, comment=comment))
+        else:
+            rating.stars, rating.comment = stars, comment
+            rating.date = datetime.now(timezone.utc)
+        try:
+            db.session.flush()
+            note.update_avg_rating()  # same transaction as the rating change
+            db.session.commit()
+            break
+        except IntegrityError as exc:
+            # A simultaneous first rating by the same user won the insert:
+            # roll back and apply this submission as an update instead.
+            db.session.rollback()
+            if attempt == 2 or not _is_duplicate(exc, "uq_ratings_note_student"):
+                raise
+            note = lock_note(note_id)
+
+    flash("Thanks! Your rating has been saved." if created else "Your rating has been updated.",
+          "success")
+    return _back_to_note(note_id, "#reviews-heading")
+
+
+# --------------------------------------------------------------------------
+# Reports: POST /note/<id>/report
+# --------------------------------------------------------------------------
+
+def open_report_count(note_id):
+    # Locking read: counts the latest committed reports, not an older snapshot.
+    return db.session.execute(
+        db.select(db.func.count(Report.id))
+        .where(Report.note_id == note_id, Report.status == "open")
+        .with_for_update(read=True)
+    ).scalar()
+
+
+@bp.route("/note/<int:note_id>/report", methods=["POST"])
+@login_required
+def report(note_id):
+    user = g.current_user
+    form = {"reason": (request.form.get("reason") or "").strip(),
+            "details": _clean_text(request.form.get("details"))}
+
+    note = lock_note(note_id)
+    if note is None or not can_view(note, user):
+        abort(404)
+    if note.uploader_id == user.id:
+        db.session.rollback()
+        flash("You cannot report your own note.", "error")
+        return _back_to_note(note_id)
+    if Report.query.filter_by(note_id=note.id, reporter_id=user.id).first() is not None:
+        db.session.rollback()
+        flash("You have already reported this note.", "info")
+        return _back_to_note(note_id)
+    if note.status != "active":
+        db.session.rollback()
+        flash("This note is already under review or has been removed, so it can't be reported.",
+              "info")
+        return _back_to_note(note_id)
+
+    errors = {}
+    if form["reason"] not in REPORT_REASONS:
+        errors["reason"] = "Choose a reason from the list."
+    if len(form["details"]) > REPORT_DETAILS_MAX_LENGTH:
+        errors["details"] = f"Details must be {REPORT_DETAILS_MAX_LENGTH:,} characters or fewer."
+    elif form["reason"] == "other" and not form["details"]:
+        errors["details"] = "Please describe the problem when you choose “Other”."
+    if errors:
+        db.session.rollback()
+        flash("Please correct the highlighted fields.", "error")
+        return render_detail(db.session.get(Note, note_id), report_form=form, report_errors=errors,
+                             status=422)
+
+    db.session.add(Report(note_id=note.id, reporter_id=user.id, reason=REPORT_REASONS[form["reason"]],
+                          details=form["details"] or None, status="open"))
+    try:
+        db.session.flush()
+    except IntegrityError as exc:
+        db.session.rollback()
+        if not _is_duplicate(exc, "uq_reports_note_reporter"):
+            raise
+        flash("You have already reported this note.", "info")
+        return _back_to_note(note_id)
+
+    # Flag the note once it has enough open reports. The note row is locked,
+    # so simultaneous reports are counted one after another.
+    flagged_now = False
+    if open_report_count(note.id) >= current_app.config["FLAG_AT_OPEN_REPORTS"]:
+        note.status = "flagged"
+        flagged_now = True
+    db.session.commit()
+
+    if flagged_now:
+        flash("Report submitted. This note has been flagged for moderator review.", "success")
+        if not user.has_role("moderator"):
+            # Ordinary students can no longer open a flagged note.
+            return redirect(url_for("notes.browse"))
+    else:
+        flash("Report submitted. Thank you, a moderator will review it.", "success")
+    return _back_to_note(note_id)
 
 
 # --------------------------------------------------------------------------
@@ -467,6 +679,11 @@ def delete(note_id):
     note = _get_viewable_note_or_404(note_id)
     if note.uploader_id != g.current_user.id:
         abort(403)
+    if note.status == "flagged":
+        # Keep the note and its reports until a moderator has reviewed them.
+        flash("This note is being reviewed by a moderator and can't be deleted until the "
+              "review is finished.", "error")
+        return redirect(url_for("notes.mine"))
 
     path = stored_file_path(note)
     title = note.title

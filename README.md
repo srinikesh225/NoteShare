@@ -13,6 +13,7 @@ repository currently contains:
 - **Phase 2: authentication and roles** ([section 23](#23-phase-2-authentication-and-roles))
 - **Phase 3: core note features** — upload, browse/search/filter, details, download, My
   Notes, delete — plus search-engine and sharing support ([section 24](#24-phase-3-core-note-features))
+- **Phase 4: ratings, reports, moderation and subjects** ([section 25](#25-phase-4-ratings-reports-moderation-and-subjects))
 
 ## 2. Phase 1 scope
 
@@ -47,8 +48,11 @@ Not implemented yet: see [section 22](#22-current-limitations-and-future-phases)
 NoteShare/
 ├── app.py                # Application factory, CSRF, error pages, dev entry point
 ├── auth.py               # Register/login/logout routes, decorators, current user
-├── notes.py              # Browse, upload, note details, download, My Notes, delete
+├── notes.py              # Browse, upload, details, ratings, reports, download, My Notes, delete
+├── moderation.py         # Moderation dashboard and dismiss/remove/warn/ban actions
+├── admin.py              # Subject administration (admins only)
 ├── seo.py                # robots.txt, sitemap.xml, llms.txt, favicon.ico, absolute URLs
+├── migrate.py            # Safe, repeatable schema upgrades (e.g. reports.details)
 ├── config.py             # Loads .env, defines Config, validates required settings
 ├── models.py             # db = SQLAlchemy(), the five models, role hierarchy
 ├── schema.sql            # Raw MySQL DDL matching models.py
@@ -67,6 +71,9 @@ NoteShare/
 │   ├── upload.html
 │   ├── note_detail.html
 │   ├── my_notes.html
+│   ├── moderation.html   # Open reports grouped by note
+│   ├── admin_subjects.html
+│   ├── admin_subject_form.html
 │   ├── register.html
 │   ├── login.html
 │   ├── account.html      # Your account details
@@ -82,14 +89,16 @@ NoteShare/
 │   ├── conftest.py       # Test app, test-database guard, fixtures, test files
 │   ├── test_auth.py      # Phase 2
 │   ├── test_notes.py     # Phase 3
-│   └── test_seo.py       # Titles, headings, canonical/robots, sitemap, structured data
+│   ├── test_seo.py       # Titles, headings, canonical/robots, sitemap, structured data
+│   └── test_phase4.py    # Ratings, reports, flagging, moderation, subjects, end-to-end
 └── uploads/              # Uploaded note files (UUID names); contents are git-ignored
 ```
 
 `uploads/.gitkeep` is an empty placeholder so Git keeps the folder.
 
 Import direction (no circular imports): `app.py → auth.py, notes.py, seo.py, config.py,
-models.py`; `notes.py → auth.py, models.py`; `auth.py, seo.py → models.py`;
+models.py, moderation.py, admin.py`; `moderation.py → auth.py, notes.py, models.py`;
+`notes.py, admin.py → auth.py, models.py`; `auth.py, seo.py → models.py`;
 `seed.py → app.py, models.py`.
 
 ## 5. Prerequisites
@@ -428,17 +437,13 @@ create them on a server that anyone else can reach, and never reuse them anywher
 
 ## 22. Current limitations and future phases
 
-Phase 1 contained no pages or routes; Phase 2 added accounts (section 23) and Phase 3 the
-note features (section 24). The following still do **not** exist:
+Phase 1 contained no pages or routes. Phase 2 added accounts (section 23), Phase 3 the
+note features (section 24) and Phase 4 ratings, reports, moderation and subject
+administration (section 25).
 
-- Submitting ratings and reviews (existing ratings are displayed)
-- Reporting UI
-- Moderation dashboard
-- Administrative dashboard
-
-There are also no database migrations yet: `seed.py` creates missing tables but does not
-alter existing ones. If a later phase changes a model, adopt a migration tool
-(e.g. Flask-Migrate) at that point.
+Schema changes after Phase 1 are applied by `migrate.py` (section 25.8), which only adds
+columns and is safe to run repeatedly. If the schema starts changing often, switch to a
+full migration tool such as Flask-Migrate.
 
 ## 23. Phase 2: Authentication and Roles
 
@@ -570,12 +575,11 @@ per request.
 | Moderator  | the student items + Reports |
 | Admin      | the moderator items + Subjects |
 
-Reports and Subjects are not built yet. They are shown greyed out with a "Soon" label
-instead of linking to pages that don't exist. Each navigation item is tied to an endpoint
-name in `auth.NAV_ITEMS` (`notes.browse`, `notes.upload`, `notes.mine`,
-`moderation.reports`, `admin.subjects`); when a later phase registers a route with that
-endpoint name, the item turns into a working link automatically. Browse, Upload and My
-Notes became links this way in Phase 3.
+Each navigation item is tied to an endpoint name in `auth.NAV_ITEMS` (`notes.browse`,
+`notes.upload`, `notes.mine`, `moderation.reports`, `admin.subjects`). An item whose
+endpoint does not exist yet is shown greyed out with a "Soon" label; once a route with that
+endpoint name is registered, it becomes a working link automatically. Since Phase 4 every
+item is a real page.
 
 The pages are plain HTML and CSS (`static/css/style.css`) with no framework and no web
 fonts. They use ink (near-black) plus one lime highlight, visible keyboard focus, labelled fields with errors
@@ -627,8 +631,8 @@ navigation per role, cookie flags, escaping of user input, and form-value preser
 
 - No password reset, email verification, "remember me", or account editing.
 - No login rate limiting or account lockout; add it before a public deployment.
-- Promoting, demoting and banning users is done in MySQL until the admin and moderation
-  tools exist.
+- Promoting or demoting users is done in MySQL. Banning is done from the moderation
+  dashboard (section 25.5); un-banning is done in MySQL.
 - No Privacy Policy or Terms pages yet; both are needed before a public launch.
 
 ## 24. Phase 3: Core Note Features
@@ -735,7 +739,8 @@ uploader may delete it (others get 403, including moderators; a GET request gets
 database row is deleted first; the note's ratings and reports go with it through the
 `ON DELETE CASCADE` foreign keys, and nothing belonging to other notes is touched. The file
 is removed only after the database commit succeeds, and a file that can't be removed is
-logged for manual cleanup. Uploaders can currently delete their own flagged notes too.
+logged for manual cleanup. Since Phase 4, a **flagged** note cannot be deleted by its
+uploader until a moderator has reviewed it, so its reports are kept.
 
 ### 24.7 Search engines, sharing and page quality
 
@@ -789,7 +794,200 @@ items in 24.7.
 
 ### 24.10 Phase 3 limitations
 
-- Rating and reporting forms, moderation and subject administration come in a later phase.
-- Card ratings use the stored `Note.avg_rating`; the code that adds ratings must call
-  `Note.update_avg_rating()` (the detail page always calculates from the ratings).
+- Card ratings use the stored `Note.avg_rating`, which the rating route keeps up to date
+  (section 25.2); the detail page always calculates from the ratings themselves.
 - Content checks catch disguised files but are not a virus scan.
+
+## 25. Phase 4: Ratings, Reports, Moderation, and Subjects
+
+Phase 4 adds rating and report forms to the note page (`notes.py`), a moderation
+dashboard (`moderation.py`) and subject administration (`admin.py`). The only schema change
+is one new nullable column, `reports.details` (section 25.8).
+
+### 25.1 Routes
+
+| Route | Method | Access | Purpose |
+| ----- | ------ | ------ | ------- |
+| `/note/<id>/rate` | POST | signed in, not the uploader | Create or update your rating |
+| `/note/<id>/report` | POST | signed in, not the uploader | Report a note |
+| `/moderation` | GET | moderators, admins | Open reports grouped by note |
+| `/moderation/note/<id>/dismiss` | POST | moderators, admins | Close open reports; flagged note becomes active |
+| `/moderation/note/<id>/remove` | POST | moderators, admins | Hide the note; close open reports |
+| `/moderation/note/<id>/warn` | POST | moderators, admins | Add a warning to the uploader |
+| `/moderation/note/<id>/ban` | POST | moderators, admins | Suspend the uploader |
+| `/admin/subjects` | GET | admins | List subjects with note counts |
+| `/admin/subjects/add` | GET, POST | admins | Add a subject |
+| `/admin/subjects/<id>/edit` | GET, POST | admins | Edit a subject |
+| `/admin/subjects/<id>/delete` | POST | admins | Delete a subject that has no notes |
+
+Every state-changing route is POST-only (GET gets 405) and needs a CSRF token (missing or
+wrong token gets 400). Students get 403 on moderation and subject routes; moderators get 403
+on subject routes; signed-out visitors are sent to log in. Banned users are blocked by the
+existing `login_required` check on their next request.
+
+### 25.2 Ratings
+
+The note page shows a 1–5 star picker (real radio buttons, so it works with the keyboard
+and without JavaScript) and an optional review of up to 1,000 characters.
+
+- Any signed-in, non-banned user can rate an **active** note they did not upload. The author
+  is always the signed-in user, stored in `ratings.student_id`; the note comes from the
+  URL. Submitted `student_id`/`note_id` fields are ignored.
+- Rating your own note shows *"You cannot rate your own note."* and saves nothing.
+- Stars must be exactly `1`–`5`; anything else (0, 6, `abc`, `3.5`, missing) is rejected
+  with the form values kept.
+- **One rating per student per note.** Submitting again updates your stars, review and date
+  instead of adding a row. The `uq_ratings_note_student` unique key backs this; if two
+  submissions race, the loser is retried as an update.
+- After every create or update, `Note.update_avg_rating()` runs **in the same
+  transaction**, so the stored average is never out of step with the ratings. The route
+  locks the note row first and the average is read with a locking read, so simultaneous
+  ratings from different students all count (tested with six at once).
+- The note page shows the average, the number of ratings and every review (name, stars,
+  comment, date, newest first). With none it says *"No ratings yet."* The homepage cards
+  show the stored average.
+
+### 25.3 Reports and automatic flagging
+
+The note page has a **Report this note** form with a required reason (*Wrong subject,
+Copied content, Unreadable, Inappropriate, Other*) and optional details (up to 1,000
+characters; required for *Other*). Any other reason value is rejected.
+
+- The reason is stored in `reports.reason` and the details in the new `reports.details`
+  column. `action_taken` is kept for moderator decisions.
+- You cannot report your own note (*"You cannot report your own note."*).
+- **One report per student per note**, ever (`uq_reports_note_reporter`). A second attempt
+  shows *"You have already reported this note."* Resolved reports are never reopened or
+  deleted to allow a new one. After reporting, the page shows when you reported and
+  whether a moderator has reviewed it.
+- Only **active** notes can be reported. A removed note can never be flagged or
+  reactivated by a report.
+- New reports are `open`. **When a note has 3 or more open reports, it becomes `flagged`**
+  (`FLAG_AT_OPEN_REPORTS` in `config.py`). Resolved reports don't count. This happens in the
+  same transaction as the third report. The note row is locked, so simultaneous reports are
+  counted one after another: with six students reporting at the same instant, exactly three
+  reports were accepted, the note was flagged, and the rest were refused because the note
+  was no longer visible to them.
+- A flagged note disappears from browse, and ordinary students get 404 for its page and its
+  download (enforced in the routes, not just hidden). Its uploader and moderators can still
+  open it.
+- Students never see who reported a note; reporter names are shown to moderators only.
+
+### 25.4 Moderation dashboard
+
+`/moderation` lists every note that has open reports, **one card per note** with all its
+open reports inside. Each card shows:
+
+- the title (linked), subject, uploader (with their warning count) and upload date
+- the status, open-report count, average rating and downloads
+- each report's reason, details, reporter and date
+
+Order: **flagged notes first**, then the most open reports, then the oldest report, then
+note id (10 cards per page). With nothing to review it shows *"No open reports. Everything
+is clear."* Loading the cards and their reports takes three queries (count, page of notes, their reports), however many reports there are.
+
+### 25.5 Moderation actions
+
+Each action locks the note, makes all its changes in one transaction (rolled back with a
+generic message if anything fails), and appends a line such as
+`2026-10-09 16:40 UTC: Dismissed by moderator Rahul Verma (user #2)` to the
+`action_taken` history of the affected open reports. Nothing deletes notes, files, ratings,
+reports or users.
+
+| Action | What happens |
+| ------ | ------------ |
+| **Dismiss** | All open reports for the note become `resolved`; a flagged note becomes `active` again and reappears in browse. A removed note stays removed. |
+| **Remove** (with confirmation) | Note becomes `removed` (hidden from students; file kept); all its open reports become `resolved`. |
+| **Warn uploader** | Uploader's `warnings` goes up by 1. **At 3 warnings the uploader is suspended automatically** (`BAN_AT_WARNINGS`). Reports stay open. The message gives the new count, e.g. *"Warning count: 2 of 3."* |
+| **Ban uploader** (with confirmation) | Uploader's `is_banned` becomes true; the account, notes and history are kept. They cannot log in and any existing session is ended on its next request. |
+
+- The uploader is always taken from the note, never from form data.
+- **No double warnings:** the warn form carries the warning count the moderator saw, and the
+  update only applies if the count is still the same, so a double-click or resubmitted form
+  adds one warning, not two. Buttons are also disabled after the first click.
+- A moderator cannot warn or ban an **admin**; only an admin can. An admin who bans their
+  own account is signed out on their next request.
+- **Confirmation:** *Remove note*, *Ban uploader* and subject deletion open an inline
+  confirmation panel ("Are you sure you want to remove this note? The note will be hidden
+  from students and all open reports will be closed.") with a separate "Yes, …" button. It
+  is a built-in `<details>` panel, so it also works without JavaScript. It is a usability
+  safeguard; permissions are checked on the server for every request.
+
+### 25.6 Subject administration
+
+`/admin/subjects` (admins only) lists every subject with its code, name, semester and note
+count, with Add, Edit and Delete buttons. With no subjects it shows *"No subjects found."*
+and an Add button.
+
+- **Code:** required, up to 20 characters, letters/numbers/spaces/hyphens, stored in
+  capitals, unique (case-insensitively). A clash shows *"A subject with the code … already
+  exists."* (also if two admins race; the unique key catches it).
+- **Name:** required, up to 150 characters. **Semester:** 1 to 8.
+- Editing keeps the same subject id, so its notes simply show the new code and name.
+  Keeping the same code is not treated as a duplicate.
+- **Deleting** is POST with CSRF and an inline confirmation, and only works when no notes
+  use the subject. Otherwise it shows *"This subject cannot be deleted because notes are
+  associated with it."* The `ON DELETE RESTRICT` foreign key enforces the same rule in
+  MySQL. Notes are never cascade-deleted.
+
+### 25.7 Other changes
+
+- The uploader of a **flagged** note can no longer delete it until a moderator has
+  reviewed it (removed notes can still be deleted by their uploader).
+- The account page shows your warning count once you have one.
+- The navigation's *Reports* and *Subjects* items now link to the new pages.
+
+### 25.8 Database migration
+
+New column: `reports.details TEXT NULL` (the reporter's explanation). Existing reports are
+untouched; their details are empty.
+
+`migrate.py` applies it safely: it checks `information_schema` first, only runs
+`ALTER TABLE reports ADD COLUMN details TEXT NULL AFTER reason` when the column is missing,
+never drops anything, and does nothing on a second run. `python seed.py` and the test suite
+run it automatically; you can also run it on its own:
+
+```powershell
+python migrate.py
+```
+
+The app's MySQL user already has the `ALTER` privilege on `noteshare` (section 10). Taking
+a backup first is still good practice:
+`mysqldump -u root -p noteshare > noteshare_backup.sql`. `schema.sql` includes the new
+column for fresh installs.
+
+### 25.9 Tests and verification
+
+```powershell
+python -m pytest -v
+```
+
+`tests/test_phase4.py` drives everything through the real routes with real CSRF tokens
+against the MySQL test database:
+
+- **Ratings:** valid, invalid, missing and malformed stars; own note; updates instead of
+  duplicates; `update_avg_rating()` called; averages after one, several and changed
+  ratings; signed-out and banned users; spoofed ids; escaping; only active notes.
+- **Reports:** valid reports stored as `open`; exactly the five reasons; invalid reasons;
+  details rules; own note; duplicates; spoofed ids; flagging on the third open report;
+  resolved reports not counting; removed notes not reactivated; reporter privacy.
+- **Moderation:**
+  - access for students, signed-out visitors, moderators and admins
+  - ordering and grouping
+  - dismiss, remove, warn and ban, including the third-warning ban and double-submit
+    protection
+  - moderators can't act on admins
+  - students, GET requests and forged or missing CSRF tokens change nothing
+- **Subjects:** student and moderator access, add/edit/delete, duplicate and invalid
+  input, form values kept, notes unaffected by edits, in-use subjects protected.
+- **The required end-to-end workflow:**
+  1. Three students report one note: after each report the note stays active, then it
+     becomes flagged.
+  2. It disappears from browse and its download is refused.
+  3. The moderator sees it first, with all three reasons and details.
+  4. Dismiss makes it active and listed again, while an unrelated open report stays open.
+  5. The database keeps all three reports as `resolved`.
+- **Concurrency:** six simultaneous reports and six simultaneous ratings against MySQL.
+  With the row locks removed as an experiment, both tests failed every time (extra
+  reports accepted; database deadlocks on ratings), which confirms the locks are what make
+  them pass.

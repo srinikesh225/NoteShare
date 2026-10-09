@@ -90,6 +90,10 @@ class Config:
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # exactly 10 MiB
     ALLOWED_EXTENSIONS = frozenset({"pdf", "docx", "pptx", "jpg", "png"})
 
+    # --- Moderation rules ---------------------------------------------------
+    FLAG_AT_OPEN_REPORTS = 3   # a note with this many open reports is flagged
+    BAN_AT_WARNINGS = 3        # an uploader with this many warnings is banned
+
     @classmethod
     def validate(cls) -> None:
         """Raise ConfigError describing every problem with the configuration.

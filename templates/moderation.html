@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% from "_notes.html" import rating_summary, status_badge, pager %}
+{% from "_layout.html" import breadcrumbs %}
+
+{% block title %}Moderation{% if page > 1 %} — page {{ page }}{% endif %}{% endblock %}
+{% block description %}Open reports on NoteShare notes, grouped by note, for moderators.{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+{% block main_class %}site-main--wide{% endblock %}
+
+{% block breadcrumbs %}{{ breadcrumbs([("Browse notes", url_for("notes.browse")), ("Moderation", none)]) }}{% endblock %}
+
+{% block content %}
+<section aria-labelledby="moderation-heading">
+  <div class="page-header">
+    <div>
+      <h1 id="moderation-heading">Moderation<sup class="heading-count" aria-label="{{ pagination.total }} notes with open reports"> ({{ pagination.total }})</sup></h1>
+      <p class="page-intro">Open reports, grouped by note. Flagged notes come first, then the most reported, then the longest waiting.</p>
+    </div>
+  </div>
+
+  {% if groups %}
+    <ol class="mod-groups" role="list">
+      {% for note, reports in groups %}
+        <li>
+          <article class="mod-group{% if note.status == 'flagged' %} mod-group--flagged{% endif %}" id="note-{{ note.id }}" aria-labelledby="mod-title-{{ note.id }}">
+            <header class="mod-group-header">
+              <div>
+                <p class="note-card-subject">
+                  <span class="subject-code">{{ note.subject.code }}</span>
+                  <span>{{ note.subject.name }}</span>
+                </p>
+                <h2 class="mod-title" id="mod-title-{{ note.id }}">
+                  <a href="{{ url_for('notes.detail', note_id=note.id) }}">{{ note.title }}</a>
+                </h2>
+                <p class="note-card-meta">
+                  Uploaded by {{ note.uploader.name }}
+                  ({{ note.uploader.warnings }} of {{ ban_at }} warnings{% if note.uploader.is_banned %}, suspended{% endif %})
+                  · <time datetime="{{ note.upload_date.isoformat() }}">{{ note.upload_date|ui_date }}</time>
+                </p>
+              </div>
+              <dl class="mod-stats">
+                <div><dt>Status</dt><dd>{{ status_badge(note.status, status_labels[note.status]) }}</dd></div>
+                <div><dt>Open reports</dt><dd>{{ reports|length }}</dd></div>
+                <div><dt>Rating</dt><dd>{{ rating_summary(note.avg_rating) }}</dd></div>
+                <div><dt>Downloads</dt><dd>{{ note.download_count }}</dd></div>
+              </dl>
+            </header>
+
+            <ul class="mod-reports" role="list" aria-label="Open reports for {{ note.title }}">
+              {% for report in reports %}
+                <li class="mod-report">
+                  <p class="mod-report-head">
+                    <strong>{{ report.reason }}</strong>
+                    <span class="muted">· {{ report.reporter.name }} · <time datetime="{{ report.date.isoformat() }}">{{ report.date|ui_date }}</time></span>
+                  </p>
+                  {% if report.details %}<p class="mod-report-details">{{ report.details }}</p>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+
+            <div class="mod-actions">
+              <div class="mod-actions-group" aria-label="Review actions">
+                <form method="post" action="{{ url_for('moderation.dismiss', note_id=note.id) }}" data-submit-once>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="page" value="{{ page }}">
+                  <button type="submit" class="button button--secondary button--small">Dismiss reports</button>
+                </form>
+                {% if not note.uploader.is_banned %}
+                <form method="post" action="{{ url_for('moderation.warn', note_id=note.id) }}" data-submit-once>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="page" value="{{ page }}">
+                  <input type="hidden" name="warnings_seen" value="{{ note.uploader.warnings }}">
+                  <button type="submit" class="button button--secondary button--small">
+                    Warn uploader{% if note.uploader.warnings + 1 >= ban_at %} (this will suspend them){% endif %}
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+
+              <div class="mod-actions-group mod-actions-group--danger" aria-label="Destructive actions">
+                {% if note.status != "removed" %}
+                <details class="confirm-delete confirm-delete--inline">
+                  <summary class="button button--danger-outline button--small">Remove note</summary>
+                  <form method="post" action="{{ url_for('moderation.remove', note_id=note.id) }}" data-submit-once>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="page" value="{{ page }}">
+                    <p>Are you sure you want to remove this note? The note will be hidden from students and all open reports will be closed.</p>
+                    <button type="submit" class="button button--danger button--small">Yes, remove note</button>
+                  </form>
+                </details>
+                {% endif %}
+                {% if not note.uploader.is_banned %}
+                <details class="confirm-delete confirm-delete--inline">
+                  <summary class="button button--danger-outline button--small">Ban uploader</summary>
+                  <form method="post" action="{{ url_for('moderation.ban', note_id=note.id) }}" data-submit-once>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="page" value="{{ page }}">
+                    <p>Are you sure you want to suspend {{ note.uploader.name }}? They will not be able to log in.</p>
+                    <button type="submit" class="button button--danger button--small">Yes, suspend uploader</button>
+                  </form>
+                </details>
+                {% endif %}
+              </div>
+            </div>
+          </article>
+        </li>
+      {% endfor %}
+    </ol>
+    {{ pager(pagination, "moderation.reports", {}) }}
+  {% else %}
+    <div class="empty-state" role="status">
+      <h2>No open reports. Everything is clear.</h2>
+      <p>New reports from students will appear here.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

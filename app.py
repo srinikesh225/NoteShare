@@ -15,7 +15,9 @@ import os
 from flask import Flask, render_template, request
 from flask_wtf.csrf import CSRFError, CSRFProtect
 
+import admin
 import auth
+import moderation
 import notes
 import seo
 from config import Config
@@ -52,6 +54,8 @@ def create_app(config_class=Config) -> Flask:
     app.register_blueprint(auth.bp)
     app.register_blueprint(notes.bp)
     app.register_blueprint(seo.bp)
+    app.register_blueprint(moderation.bp)
+    app.register_blueprint(admin.bp)
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(error):

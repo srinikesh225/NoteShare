@@ -24,6 +24,7 @@ from werkzeug.security import generate_password_hash
 import config  # loads .env
 from app import create_app
 from auth import login_required, role_required
+from migrate import apply_migrations
 from models import Subject, User, db
 from seed import SEED_SUBJECTS
 
@@ -79,6 +80,7 @@ def app(tmp_path_factory):
     _register_test_routes(app)
     with app.app_context():
         db.create_all()
+        apply_migrations(db.engine)
     yield app
     with app.app_context():
         db.engine.dispose()

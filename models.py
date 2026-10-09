@@ -173,6 +173,11 @@ class Note(db.Model):
         ratings that were just added, changed or deleted in the current
         session are included.
 
+        The query is a locking read (SELECT ... FOR SHARE), so it sees the
+        latest committed ratings even inside a transaction that started
+        earlier; together with the note-row lock taken by the rating route,
+        two students rating at the same moment cannot leave a stale average.
+
         The result is rounded to 2 decimal places; a note with no ratings
         gets 0.0.
 
@@ -183,6 +188,7 @@ class Note(db.Model):
         average = (
             db.session.query(db.func.avg(Rating.stars))
             .filter(Rating.note_id == self.id)
+            .with_for_update(read=True)
             .scalar()
         )
         self.avg_rating = round(float(average), 2) if average is not None else 0.0
@@ -247,6 +253,9 @@ class Report(db.Model):
         nullable=False,
     )
     reason = db.Column(db.Text, nullable=False)
+    # Optional explanation written by the reporter (added in Phase 4; see
+    # migrate.py). action_taken stays reserved for moderator decisions.
+    details = db.Column(db.Text, nullable=True)
     status = db.Column(_enum(REPORT_STATUSES, "report_status"), nullable=False,
                        default="open", server_default="open")
     action_taken = db.Column(db.Text, nullable=True)

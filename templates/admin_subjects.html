@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "_layout.html" import breadcrumbs %}
+
+{% block title %}Manage subjects{% endblock %}
+{% block description %}Add, edit and delete NoteShare subjects.{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+{% block main_class %}site-main--wide{% endblock %}
+
+{% block breadcrumbs %}{{ breadcrumbs([("Browse notes", url_for("notes.browse")), ("Manage subjects", none)]) }}{% endblock %}
+
+{% block content %}
+<section aria-labelledby="subjects-heading">
+  <div class="page-header">
+    <div>
+      <h1 id="subjects-heading">Manage subjects<sup class="heading-count" aria-label="{{ rows|length }} subjects"> ({{ rows|length }})</sup></h1>
+      <p class="page-intro">Subjects are the courses notes are filed under. A subject can only be deleted when no notes use it.</p>
+    </div>
+    <a class="button button--primary" href="{{ url_for('admin.add_subject') }}">Add subject</a>
+  </div>
+
+  {% if rows %}
+    <div class="table-wrap">
+      <table class="notes-table subjects-table">
+        <thead>
+          <tr>
+            <th scope="col">Code</th>
+            <th scope="col">Name</th>
+            <th scope="col">Semester</th>
+            <th scope="col">Notes</th>
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for subject, note_count in rows %}
+            <tr>
+              <th scope="row" data-label="Code"><span class="subject-code">{{ subject.code }}</span></th>
+              <td data-label="Name">{{ subject.name }}</td>
+              <td data-label="Semester">{{ subject.semester }}</td>
+              <td data-label="Notes">
+                {% if note_count %}<a href="{{ url_for('notes.browse', subject=subject.id) }}">{{ note_count }}</a>{% else %}0{% endif %}
+              </td>
+              <td class="row-actions">
+                <a class="button button--secondary button--small" href="{{ url_for('admin.edit_subject', subject_id=subject.id) }}">Edit<span class="visually-hidden"> {{ subject.code }}</span></a>
+                {% if note_count %}
+                  <span class="muted small" title="Subjects with notes can't be deleted">In use</span>
+                {% else %}
+                  <details class="confirm-delete confirm-delete--inline">
+                    <summary class="button button--danger-outline button--small">Delete<span class="visually-hidden"> {{ subject.code }}</span></summary>
+                    <form method="post" action="{{ url_for('admin.delete_subject', subject_id=subject.id) }}" data-submit-once>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <p>Delete {{ subject.code }} {{ subject.name }} permanently?</p>
+                      <button type="submit" class="button button--danger button--small">Yes, delete subject</button>
+                    </form>
+                  </details>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <h2>No subjects found.</h2>
+      <p>Add your first subject so students can file notes under it.</p>
+      <a class="button button--primary" href="{{ url_for('admin.add_subject') }}">Add subject</a>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

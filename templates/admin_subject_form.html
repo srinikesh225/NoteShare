@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_forms.html" import input_field, field_error, described_by %}
+{% from "_layout.html" import breadcrumbs %}
+
+{% block title %}{{ "Edit " ~ subject.code if subject else "Add a subject" }}{% endblock %}
+{% block description %}{{ "Edit a NoteShare subject." if subject else "Add a subject to NoteShare." }}{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block breadcrumbs %}{{ breadcrumbs([("Browse notes", url_for("notes.browse")), ("Manage subjects", url_for("admin.subjects")), ("Edit " ~ subject.code if subject else "Add subject", none)]) }}{% endblock %}
+
+{% block content %}
+<section class="page" aria-labelledby="subject-form-heading">
+  <h1 id="subject-form-heading">{{ "Edit " ~ subject.code if subject else "Add a subject" }}</h1>
+  <p class="page-intro">
+    {% if subject %}Changes apply to every note filed under this subject; the notes themselves are not changed.
+    {% else %}Students choose from these subjects when they upload notes.{% endif %}
+  </p>
+
+  <form method="post" class="form-card"
+        action="{{ url_for('admin.edit_subject', subject_id=subject.id) if subject else url_for('admin.add_subject') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {{ input_field('code', 'Subject code', errors, form.code, hint='For example, CS501. Stored in capitals; must be unique.',
+                   required=true, maxlength=code_max, autocomplete='off', spellcheck='false') }}
+
+    {{ input_field('name', 'Subject name', errors, form.name, hint='For example, Design and Analysis of Algorithms.',
+                   required=true, maxlength=name_max, autocomplete='off') }}
+
+    <div class="field{% if errors.get('semester') %} field--invalid{% endif %}">
+      <label for="semester">Semester</label>
+      <select id="semester" name="semester" required{{ described_by('semester', errors, none) }}>
+        <option value=""{% if not form.semester %} selected{% endif %}>Choose a semester</option>
+        {% for s in semesters %}
+          <option value="{{ s }}"{% if form.semester == s|string %} selected{% endif %}>Semester {{ s }}</option>
+        {% endfor %}
+      </select>
+      {{ field_error('semester', errors) }}
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="button button--primary">{{ "Save changes" if subject else "Add subject" }}</button>
+      <a class="button button--secondary" href="{{ url_for('admin.subjects') }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

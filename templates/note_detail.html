@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_notes.html" import star_icon, star_row, status_badge %}
 {% from "_layout.html" import breadcrumbs %}
+{% from "_forms.html" import field_error %}
 
 {% block title %}{{ note.title }} — {{ note.subject.code }} notes{% endblock %}
 {% block description -%}
@@ -97,6 +98,36 @@
 
       <section aria-labelledby="reviews-heading">
         <h2 id="reviews-heading" class="section-heading">Reviews</h2>
+
+        {% if can_rate %}
+          <form method="post" action="{{ url_for('notes.rate', note_id=note.id) }}" class="rating-form" data-submit-once>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <fieldset class="star-input{% if rating_errors.get('stars') %} field--invalid{% endif %}"
+              {%- if rating_errors.get('stars') %} aria-describedby="stars-error"{% endif %}>
+              <legend>{{ "Your rating" if my_rating else "Rate these notes" }} <span class="optional">(required)</span></legend>
+              <div class="star-options">
+                {% for n in range(1, 6) %}
+                  <input type="radio" id="stars-{{ n }}" name="stars" value="{{ n }}" required
+                    {%- if rating_form.stars == n|string %} checked{% endif %}>
+                  <label for="stars-{{ n }}" title="{{ n }} star{{ 's' if n > 1 }}">{{ star_icon() }}<span class="visually-hidden">{{ n }} star{{ 's' if n > 1 }}</span></label>
+                {% endfor %}
+              </div>
+              {{ field_error('stars', rating_errors) }}
+            </fieldset>
+            <div class="field{% if rating_errors.get('comment') %} field--invalid{% endif %}">
+              <label for="comment">Review <span class="optional">(optional)</span></label>
+              <textarea id="comment" name="comment" rows="3" maxlength="{{ comment_max }}"
+                {%- if rating_errors.get('comment') %} aria-invalid="true" aria-describedby="comment-error"{% endif %}>{{ rating_form.comment }}</textarea>
+              {{ field_error('comment', rating_errors) }}
+            </div>
+            <button type="submit" class="button button--primary">{{ "Update your rating" if my_rating else "Submit rating" }}</button>
+          </form>
+        {% elif is_owner %}
+          <p class="form-note">This is your note, so you can't rate or report it.</p>
+        {% elif not current_user and note.status == "active" %}
+          <p class="form-note"><a href="{{ url_for('auth.login', next=url_for('notes.detail', note_id=note.id)) }}">Log in</a> to rate or report this note.</p>
+        {% endif %}
+
         {% if ratings %}
           <ul class="reviews" role="list">
             {% for rating in ratings %}
@@ -111,9 +142,46 @@
             {% endfor %}
           </ul>
         {% else %}
-          <p class="muted">No ratings yet.</p>
+          <p class="muted">No ratings yet.{% if can_rate %} Be the first to rate these notes.{% endif %}</p>
         {% endif %}
       </section>
+
+      {% if my_report or can_report %}
+      <section aria-labelledby="report-heading" class="report-section">
+        <h2 id="report-heading" class="section-heading">Report a problem</h2>
+        {% if my_report %}
+          <p class="muted">You reported this note on <time datetime="{{ my_report.date.isoformat() }}">{{ my_report.date|ui_date }}</time>
+            ({{ my_report.reason }}). {{ "A moderator will review it." if my_report.status == "open" else "A moderator has reviewed your report." }}</p>
+        {% else %}
+          <p class="muted">Tell a moderator if these notes are in the wrong subject, copied, unreadable or inappropriate.</p>
+          <details class="report-details"{% if report_errors %} open{% endif %}>
+            <summary class="button button--secondary button--small">Report this note</summary>
+            <form method="post" action="{{ url_for('notes.report', note_id=note.id) }}" class="report-form" data-submit-once>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <div class="field{% if report_errors.get('reason') %} field--invalid{% endif %}">
+                <label for="reason">Reason</label>
+                <select id="reason" name="reason" required
+                  {%- if report_errors.get('reason') %} aria-invalid="true" aria-describedby="reason-error"{% endif %}>
+                  <option value=""{% if not report_form.reason %} selected{% endif %}>Choose a reason</option>
+                  {% for value, label in report_reasons.items() %}
+                    <option value="{{ value }}"{% if report_form.reason == value %} selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                {{ field_error('reason', report_errors) }}
+              </div>
+              <div class="field{% if report_errors.get('details') %} field--invalid{% endif %}">
+                <label for="details">Details <span class="optional">(optional; required for “Other”)</span></label>
+                <textarea id="details" name="details" rows="3" maxlength="{{ details_max }}"
+                  {%- if report_errors.get('details') %} aria-invalid="true" aria-describedby="details-error"{% endif %}>{{ report_form.details }}</textarea>
+                {{ field_error('details', report_errors) }}
+              </div>
+              <p class="form-note">Your name is visible to moderators only, not to the uploader.</p>
+              <button type="submit" class="button button--primary">Submit report</button>
+            </form>
+          </details>
+        {% endif %}
+      </section>
+      {% endif %}
     </div>
 
     <aside class="note-aside" aria-label="Note summary">
@@ -144,7 +212,16 @@
           <p class="muted small">Downloads are available to signed-in students.</p>
         {% endif %}
 
-        {% if is_owner %}
+        {% if open_report_count is not none %}
+          <div class="staff-panel">
+            <p><strong>Moderation:</strong> {{ open_report_count }} open report{{ "s" if open_report_count != 1 }}.</p>
+            {% if open_report_count %}<a href="{{ url_for('moderation.reports') }}">Review in the moderation dashboard</a>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if is_owner and note.status == "flagged" %}
+          <p class="form-note">Notes under review can't be deleted until a moderator has finished reviewing them.</p>
+        {% elif is_owner %}
           <details class="confirm-delete">
             <summary class="button button--danger-outline button--block">Delete this note</summary>
             <form method="post" action="{{ url_for('notes.delete', note_id=note.id) }}">
