@@ -46,7 +46,7 @@ It is built with Python (Flask), MySQL, Jinja2 templates, plain CSS and a little
 - **User management for moderators:** a Users page listing every student with warnings, ban
   status and uploads, a search by name or email, and confirmed *Unban* and *Reset warnings*
   actions.
-- **Automated tests:** 290 pytest tests against a separate MySQL test database.
+- **Automated tests:** 291 pytest tests against a separate MySQL test database.
 
 ### Quick start (after the one-time setup in sections 6–13)
 
@@ -1112,7 +1112,7 @@ against the MySQL test database:
 
 ```powershell
 python -m pip install -r requirements-dev.txt
-python -m pytest -v                       # all 290 tests (about 4 minutes)
+python -m pytest -v                       # all 291 tests (about 4.5 minutes)
 python -m pytest tests/test_app.py -v     # the main scenarios only
 ```
 
@@ -1183,7 +1183,7 @@ Each row offers only the actions that apply:
 
 ### 27.3 Tests
 
-`tests/test_moderation_users.py` (20 tests):
+`tests/test_moderation_users.py` (21 tests):
 - **Required:** a moderator can unban, a moderator can reset warnings, a student can't open
   `/moderation/users` (or post its actions), and an unbanned student can log in again.
 - **Also covered:**
@@ -1197,5 +1197,12 @@ Each row offers only the actions that apply:
   - POST and CSRF are required
   - the navigation link
   - the empty state
+- **End to end** (`test_e2e_report_warn_ban_then_unban_and_reset`), the manual walkthrough
+  automated:
+  1. a student uploads a note and two others report it
+  2. the moderator warns, then bans, the uploader
+  3. the Users page shows *Banned*, "1 of 3" and both buttons, and the student can't log in
+  4. *Reset warnings* clears the warnings but keeps the ban
+  5. *Unban* makes the account active, and the student logs in again with their note intact
 
-Results are in [docs/test_cases.md](docs/test_cases.md) (TC-38 to TC-44).
+Results are in [docs/test_cases.md](docs/test_cases.md) (TC-38 to TC-45).

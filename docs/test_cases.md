@@ -4,15 +4,15 @@ This table lists the main test cases. Every row matches a real pytest test (name
 Description or listed under TC-18 onwards by file), and the **Pass/Fail column is copied from
 the latest test run**, not typed by hand.
 
-**Latest run:** 09 October 2026, 23:58 (local time) on MySQL 8.0.46, command `python -m pytest -v`.
-**Whole suite:** 290 tests collected, 290 passed, 0 failed,
+**Latest run:** 10 October 2026, 12:01 (local time) on MySQL 8.0.46, command `python -m pytest -v`.
+**Whole suite:** 291 tests collected, 291 passed, 0 failed,
 0 skipped. Some rows cover several cases of one test (for example TC-03 runs
 for both `malware.exe` and `notes.txt`); a row is marked Pass only if all its cases passed.
 
 TC-01 to TC-17 are in `tests/test_app.py`. TC-18 onwards are in the other test files:
 TC-18 to TC-20 and TC-28 in `test_auth.py`; TC-21, TC-23, TC-29, TC-30, TC-35 and TC-36 in
 `test_notes.py`; TC-22, TC-24 to TC-27 and TC-31 to TC-34 in `test_phase4.py`; TC-37 in
-`test_seo.py`; TC-38 to TC-44 in `test_moderation_users.py`.
+`test_seo.py`; TC-38 to TC-45 in `test_moderation_users.py`.
 
 | Test ID | Description | Input | Expected result | Actual result | Pass/Fail |
 | ------- | ----------- | ----- | --------------- | ------------- | --------- |
@@ -60,8 +60,9 @@ TC-18 to TC-20 and TC-28 in `test_auth.py`; TC-21, TC-23, TC-29, TC-30, TC-35 an
 | TC-42 | Users page search (5 cases) | “ananya”, “KIRAN@”, “college.example”, “nobody”, “%” | Matches by name or email, any letter case; no matches shows a message; `%` is not a wildcard | Each search listed exactly the expected students; the empty searches showed “No students match” | Pass |
 | TC-43 | Users page actions only affect students | Moderator tries to unban / reset another moderator, and a missing user id | Refused with 404; the account is unchanged | Both actions 404; the other moderator kept 2 warnings and stayed banned; unknown id 404 | Pass |
 | TC-44 | Unban and reset need POST and a CSRF token (2 cases) | GET, POST without a token, POST with a forged token | 405 for GET, 400 for missing or forged tokens; nothing changes | 405 and 400 as expected for both actions; warnings and ban status unchanged | Pass |
+| TC-45 | End to end: warn and ban a student, then reset and unban them | Student 1 uploads; students 2 and 3 report it; moderator warns then bans; moderator resets warnings, then unbans | Users page shows the right status and buttons at each step; banned student can't log in; after both actions they log in again with their note intact | Warning 1 of 3, then banned; Users page showed Banned / 1 of 3 / Unban + Reset; login refused (403); after reset: 0 of 3, still banned; after unban: Active, “No action needed”; login worked and My Notes still listed the note | Pass |
 
-Rows in this table: 44 (44 Pass, 0 Fail, 0 Skipped).
+Rows in this table: 45 (45 Pass, 0 Fail, 0 Skipped).
 
 ## How to run the tests
 
@@ -87,5 +88,5 @@ unless its name ends in `_test` and it is different from `DATABASE_URL`.
    python -m pytest tests/test_app.py -v
    ```
 
-A full run takes about four minutes. Uploaded test files go to a temporary folder,
+A full run takes about four and a half minutes. Uploaded test files go to a temporary folder,
 not `uploads/`.

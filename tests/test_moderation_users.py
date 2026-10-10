@@ -223,3 +223,67 @@ def test_users_link_in_navigation(person, moderator):
 
 def test_users_page_empty_state(moderator):
     assert "No student accounts yet." in text_of(moderator.get("/moderation/users"))
+
+
+# ---------------------------------------------------------------------------
+# The manual walkthrough from the README, automated end to end
+# ---------------------------------------------------------------------------
+
+def test_e2e_report_warn_ban_then_unban_and_reset(app, person, moderator, subjects):
+    """Upload -> two reports -> warn -> ban -> Users page -> reset -> unban -> log in."""
+    student1 = person("student1@college.example", name="Ananya Reddy")
+    student2 = person("student2@college.example", name="Karthik Menon")
+    student3 = person("student3@college.example", name="Sneha Patil")
+
+    # 1. Student 1 uploads a note.
+    response = upload_note(student1, "Graph Algorithms Notes", subjects["CS501"])
+    assert response.status_code == 302
+    note_id = int(response.headers["Location"].rsplit("/", 1)[1])
+
+    # 2. Two other students report it (two reports: not yet flagged).
+    for reporter in (student2, student3):
+        token = get_csrf_token(reporter, f"/note/{note_id}")
+        assert reporter.post(f"/note/{note_id}/report",
+                             data={"csrf_token": token, "reason": "unreadable"}).status_code == 302
+
+    # 3. The moderator sees the note on the Reports page, warns, then bans the uploader.
+    dashboard = moderator.get("/moderation").get_data(as_text=True)
+    assert f'id="note-{note_id}"' in dashboard
+    token = get_csrf_token(moderator, "/moderation")
+    moderator.post(f"/moderation/note/{note_id}/warn", data={"csrf_token": token, "warnings_seen": 0})
+    assert "Warning count: 1 of 3." in text_of(moderator.get("/moderation"))
+    token = get_csrf_token(moderator, "/moderation")
+    moderator.post(f"/moderation/note/{note_id}/ban", data={"csrf_token": token})
+    assert "Ananya Reddy has been suspended" in text_of(moderator.get("/moderation"))
+
+    # 4. The Users page now shows Student 1 as banned with 1 warning and both buttons.
+    raw = moderator.get("/moderation/users").get_data(as_text=True)
+    row = html.unescape(table_row(raw, student1.user_id))
+    assert "1 of 3" in row and ">Banned<" in row
+    assert "Unban" in row and "Reset warnings" in row
+    other = table_row(raw, student2.user_id)
+    assert "No action needed" in other
+
+    # 5. Student 1 is locked out: the old session ends and a fresh login is refused.
+    assert student1.get("/my-notes").headers["Location"] == "/login"
+    refused = log_in(app.test_client(), "student1@college.example", PASSWORD)
+    assert refused.status_code == 403
+
+    # 6. Reset warnings first: warnings 0, still banned.
+    act(moderator, student1.user_id, "reset-warnings")
+    user = user_row(app, student1.user_id)
+    assert (user.warnings, user.is_banned) == (0, True)
+    row = html.unescape(table_row(moderator.get("/moderation/users").get_data(as_text=True), student1.user_id))
+    assert "0 of 3" in row and "Unban" in row and "Reset warnings" not in row
+
+    # 7. Then unban: active again, no actions left on the row.
+    act(moderator, student1.user_id, "unban")
+    user = user_row(app, student1.user_id)
+    assert (user.warnings, user.is_banned) == (0, False)
+    row = html.unescape(table_row(moderator.get("/moderation/users").get_data(as_text=True), student1.user_id))
+    assert ">Active<" in row and "No action needed" in row
+
+    # 8. Student 1 logs in again and their note and account are intact.
+    again = app.test_client()
+    assert log_in(again, "student1@college.example", PASSWORD).headers["Location"] == "/"
+    assert "Graph Algorithms Notes" in text_of(again.get("/my-notes"))
